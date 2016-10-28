@@ -51,10 +51,14 @@
       <HintPath>..\#References\KSP 1.2\UnityEngine.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>..\#References\KSP 1.2\UnityEngine.UI.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Source\MyClass.cs" />
+    <Compile Include="Source\DockingFuelPump.cs" />
+    <Compile Include="Source\DFP_DevTools.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
