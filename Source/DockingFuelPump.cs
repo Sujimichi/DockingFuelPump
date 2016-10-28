@@ -21,23 +21,23 @@ namespace DockingFuelPump
 			Events["clear_highlight"].active = true;
 
 
-			log(this.part.attachNodes.Count.ToString());
-
-
-
-			Part connected_part; 
-			connected_part = this.part.attachNodes[1].attachedPart; 	//get part attached to lower node on docking port
-			if(!connected_part){
-				connected_part = this.part.srfAttachNode.attachedPart; 	//get part port is surface attached to
+			foreach(PartResource r in this.part.Resources){
+				log(r.resourceName + " max: " + r.maxAmount + " cur: " + r.amount);
 			}
 
-			connected_part.Highlight(Color.red);
 
-//			this.part.Highlight(Color.red);
-//			this.part.parent.Highlight(Color.blue);
-//			foreach(Part p in this.part.children){
-//				p.Highlight(Color.green);
+//			Part connected_part; 
+//			connected_part = this.part.attachNodes[1].attachedPart; 	//get part attached to lower node on docking port
+//			if(!connected_part){
+//				connected_part = this.part.srfAttachNode.attachedPart; 	//get part port is surface attached to
 //			}
+//			connected_part.Highlight(Color.red);
+
+			this.part.Highlight(Color.red);
+			this.part.parent.Highlight(Color.blue);
+			foreach(Part p in this.part.children){
+				p.Highlight(Color.green);
+			}
 		}
 
 		[KSPEvent(guiActive = true, guiName = "clear highlight", active = false)]
@@ -88,11 +88,11 @@ namespace DockingFuelPump
 
 			identify_parts();
 
-//			Debug.Log("North Parts - " + north_parts.Count);
-//			foreach(Part part in north_parts){
-//				Debug.Log(part.name);
-//				part.Highlight(Color.blue);
-//			}
+			Debug.Log("North Parts - " + north_parts.Count);
+			foreach(Part part in north_parts){
+				Debug.Log(part.name);
+				part.Highlight(Color.blue);
+			}
 
 			Debug.Log("South Parts - " + south_parts.Count);
 			foreach(Part part in south_parts){
@@ -104,22 +104,39 @@ namespace DockingFuelPump
 
 		}
 
-		internal void identify_parts(){
-			//Find the part the docking port is attached to (either by node or surface attach)
-			Part connected_part; 
-			connected_part = this.part.attachNodes[1].attachedPart; 	//get part attached to lower node on docking port
-			if(!connected_part){
-				connected_part = this.part.srfAttachNode.attachedPart; 	//get part port is surface attached to
+		//Get array of IDs of parts already added to south parts.
+		List<int> part_ids = new List<int>();
+		public List<int> south_part_ids(){
+			part_ids.Clear();
+			foreach(Part part in south_parts){
+				part_ids.Add(part.GetInstanceID());
 			}
+			return part_ids;
+		}
+
+		internal void identify_parts(){
+			//Find the part(s) the docking port is attached to (either by node or surface attach)
+			List<Part> connected_parts = new List<Part>(); 
+			foreach(AttachNode node in this.part.attachNodes){
+				if(node.attachedPart){
+					connected_parts.Add(node.attachedPart);
+				}
+			}
+			if(this.part.srfAttachNode.attachedPart){
+				connected_parts.Add(this.part.srfAttachNode.attachedPart);
+			}
+
 
 			//Find all the parts which are "south" of the docking port". South means parts which are connected to the non-docking side of the docking port.
 			List<Part> new_parts = new List<Part>();  //used in intterating over associated parts, two lists are used so one can be modified while itterating over the other.
 			List<Part> next_parts = new List<Part>();
-			List<int> part_ids = new List<int>();
+
 
 			south_parts.Clear();
-			new_parts.Add(connected_part); 	//add the part the docking port is connected to as the starting point
-			south_parts.Add(this.part);		//south_parts include the docking port so it will be excluded from subsequent passes
+			foreach(Part part in connected_parts){
+				new_parts.Add(part); 	//add the part the docking port is connected to as the starting point
+			}
+			south_parts.Add(this.part);	//south_parts include the docking port so it will be excluded from subsequent passes
 
 			//starting with the connected_part (in new_parts) find it's parent and children parts and add them to next_parts. 
 			//once itterated over new_parts the parent and children parts which were added to next_parts are added to new_parts and south_parts 
@@ -128,12 +145,6 @@ namespace DockingFuelPump
 			bool itterate = true;
 			while(itterate){
 				next_parts.Clear();
-
-				//Get array of IDs of parts already added to south parts.
-				part_ids.Clear();
-				foreach(Part part in south_parts){
-					part_ids.Add(part.GetInstanceID());
-				}
 
 				//select parents and children of parts in new_parts and add them to next_parts.
 				foreach(Part part in new_parts){
@@ -150,7 +161,7 @@ namespace DockingFuelPump
 				new_parts.Clear();
 				if (next_parts.Count > 0) {
 					foreach (Part part in next_parts) {
-						if (!part_ids.Contains(part.GetInstanceID())) {
+						if(!south_part_ids().Contains(part.GetInstanceID())){
 							new_parts.Add(part);
 							south_parts.Add(part);
 						}
@@ -166,15 +177,9 @@ namespace DockingFuelPump
 
 			}
 
-			//Get array of IDs of parts already added to south parts.
-			part_ids.Clear();
-			foreach(Part part in south_parts){
-				part_ids.Add(part.GetInstanceID());
-			}
-
 			north_parts.Clear();
 			foreach(Part part in FlightGlobals.ActiveVessel.parts){
-				if(!part_ids.Contains(part.GetInstanceID())) {
+				if(!south_part_ids().Contains(part.GetInstanceID())){
 					north_parts.Add(part);
 				}
 			}
