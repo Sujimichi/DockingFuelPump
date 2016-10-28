@@ -10,6 +10,9 @@ namespace DockingFuelPump
 {
 	public class TestHighlight : PartModule
 	{
+		public void log(string msg){
+			Debug.Log("[DFP] " + msg);
+		}
 
 		[KSPEvent(guiActive = true, guiName = "highlight")]
 		public void test_highligh(){
@@ -18,12 +21,23 @@ namespace DockingFuelPump
 			Events["clear_highlight"].active = true;
 
 
-			this.part.Highlight(Color.red);
-			this.part.parent.Highlight(Color.blue);
-			foreach(Part p in this.part.children){
-				p.Highlight(Color.green);
+			log(this.part.attachNodes.Count.ToString());
+
+
+
+			Part connected_part; 
+			connected_part = this.part.attachNodes[1].attachedPart; 	//get part attached to lower node on docking port
+			if(!connected_part){
+				connected_part = this.part.srfAttachNode.attachedPart; 	//get part port is surface attached to
 			}
 
+			connected_part.Highlight(Color.red);
+
+//			this.part.Highlight(Color.red);
+//			this.part.parent.Highlight(Color.blue);
+//			foreach(Part p in this.part.children){
+//				p.Highlight(Color.green);
+//			}
 		}
 
 		[KSPEvent(guiActive = true, guiName = "clear highlight", active = false)]
@@ -34,18 +48,18 @@ namespace DockingFuelPump
 			foreach(Part part in FlightGlobals.ActiveVessel.parts){
 				part.Highlight(false);
 			}
-
 		}
-
 	}
 
 
 
 	public class DockingFuelPump : PartModule
 	{
+		
 		public void log(string msg){
 			Debug.Log("[DFP] " + msg);
 		}
+
 
 		[KSPEvent(guiActive = true, guiName = "Pump Fuel (out)")]
 		public void pump_out(){
@@ -66,49 +80,62 @@ namespace DockingFuelPump
 
 		}
 
-		[KSPEvent(guiActive = true, guiName = "Pump Fuel (in)")]
-		public void pump_in(){
-			Debug.Log("Start Pump (in)");
-			Events["pump_in"].active = false;
-			Events["stop_pump_in"].active = true;
-			start_pump_in();
-		}
+		List<Part> north_parts = new List<Part>();
+		List<Part> south_parts = new List<Part>();
 
-		[KSPEvent(guiActive = true, guiName = "Stop Pump", active = false)]
-		public void stop_pump_in(){
-			Debug.Log("Stop Pump (in)");
-			Events["pump_in"].active = true;
-			Events["stop_pump_in"].active = false;
-		}
 
 		public void pump_fuel(){
-			Part connected_part; 
-			connected_part = this.part.attachNodes[1].attachedPart; //get part attached to lower node on docking port
-			if(!connected_part){
-				connected_part = this.part.srfAttachNode.attachedPart; //get part port is surface attached to
+
+			identify_parts();
+
+//			Debug.Log("North Parts - " + north_parts.Count);
+//			foreach(Part part in north_parts){
+//				Debug.Log(part.name);
+//				part.Highlight(Color.blue);
+//			}
+
+			Debug.Log("South Parts - " + south_parts.Count);
+			foreach(Part part in south_parts){
+				Debug.Log(part.name);
+				part.Highlight(Color.green);
 			}
 
 
-			List<Part> south_parts = new List<Part>();
-			List<Part> new_parts = new List<Part>();
+
+		}
+
+		internal void identify_parts(){
+			//Find the part the docking port is attached to (either by node or surface attach)
+			Part connected_part; 
+			connected_part = this.part.attachNodes[1].attachedPart; 	//get part attached to lower node on docking port
+			if(!connected_part){
+				connected_part = this.part.srfAttachNode.attachedPart; 	//get part port is surface attached to
+			}
+
+			//Find all the parts which are "south" of the docking port". South means parts which are connected to the non-docking side of the docking port.
+			List<Part> new_parts = new List<Part>();  //used in intterating over associated parts, two lists are used so one can be modified while itterating over the other.
 			List<Part> next_parts = new List<Part>();
 			List<int> part_ids = new List<int>();
 
-			new_parts.Add(connected_part);
-			south_parts.Add(this.part);
+			south_parts.Clear();
+			new_parts.Add(connected_part); 	//add the part the docking port is connected to as the starting point
+			south_parts.Add(this.part);		//south_parts include the docking port so it will be excluded from subsequent passes
 
+			//starting with the connected_part (in new_parts) find it's parent and children parts and add them to next_parts. 
+			//once itterated over new_parts the parent and children parts which were added to next_parts are added to new_parts and south_parts 
+			//so long as they are not already in south parts.  The loop then repeats with the new set of new_parts.  When no more parts are added to 
+			//next_parts the loop is stopped.
 			bool itterate = true;
-
-			log("starting....");
-
 			while(itterate){
 				next_parts.Clear();
-				part_ids.Clear();
 
+				//Get array of IDs of parts already added to south parts.
+				part_ids.Clear();
 				foreach(Part part in south_parts){
 					part_ids.Add(part.GetInstanceID());
 				}
 
+				//select parents and children of parts in new_parts and add them to next_parts.
 				foreach(Part part in new_parts){
 					if (part.parent) {
 						next_parts.Add(part.parent);
@@ -118,6 +145,8 @@ namespace DockingFuelPump
 					}
 				}
 
+				//add any parts in next_parts which are not already in south_parts to south_parts and new_parts
+				//if next_parts is empty then exit the loop.
 				new_parts.Clear();
 				if (next_parts.Count > 0) {
 					foreach (Part part in next_parts) {
@@ -129,63 +158,30 @@ namespace DockingFuelPump
 				}else{
 					itterate = false;
 				}
-					
+
+				//ensure the loop will end if the above check fails.
+				if(south_parts.Count > FlightGlobals.ActiveVessel.parts.Count){ 
+					itterate = false;
+				}
+
 			}
 
-
-
-			Debug.Log("South Parts - " + south_parts.Count);
+			//Get array of IDs of parts already added to south parts.
+			part_ids.Clear();
 			foreach(Part part in south_parts){
-				Debug.Log(part.name);
-				part.Highlight(Color.green);
+				part_ids.Add(part.GetInstanceID());
 			}
 
-
-
-
-
-//			foreach(Part part in FlightGlobals.ActiveVessel.parts){
-//				if (part == connected_part){
-//					log(part.GetInstanceID().ToString());
-//				}
-//			}
-
-
-
-//			log(this.part.dockingPorts.Count.ToString());
-//			log(this.part.dockingPorts[0].ToString());
-
-
-//			List<Part> parts = FlightGlobals.ActiveVessel.parts;
-//			foreach(Part part in parts){
-//				if(part.hasIndirectParent(this.part)){
-//					south_parts.Add(part);
-//				}else{
-//					north_parts.Add(part);
-//				}
-//			}
-//
-//			Debug.Log("North Parts");
-//			foreach(Part part in north_parts){
-//				Debug.Log(part.name);
-//			}
+			north_parts.Clear();
+			foreach(Part part in FlightGlobals.ActiveVessel.parts){
+				if(!part_ids.Contains(part.GetInstanceID())) {
+					north_parts.Add(part);
+				}
+			}
 
 
 		}
 
-		public void start_pump_in(){
-			Part connected_part; 
-			connected_part = this.part.attachNodes[1].attachedPart; //get part attached to lower node on docking port
-			if(!connected_part){
-				connected_part = this.part.srfAttachNode.attachedPart; //get part port is surface attached to
-			}
-
-			connected_part.Highlight(Color.red);
-			connected_part.parent.Highlight(Color.blue);
-			foreach(Part p in connected_part.children){
-				p.Highlight(Color.green);
-			}
-		}
 	}
 }
 
