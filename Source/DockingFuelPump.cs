@@ -9,23 +9,49 @@ using UnityEngine;
 namespace DockingFuelPump
 {
 
+    [KSPAddon(KSPAddon.Startup.MainMenu, false)]
+    public class DFPSettings : MonoBehaviour
+    {
+        private void Awake(){
+            try{
+                
+                string settings = System.IO.File.ReadAllText(Paths.joined(KSPUtil.ApplicationRootPath, "GameData", "DockingFuelPump", "dfp_settings.cfg"));
+                string[] lines = settings.Split(new string[] { Environment.NewLine }, StringSplitOptions.None);
+                Dictionary<string, string> opts = new Dictionary<string, string>();
+                foreach(string line in lines){
+                    if( !(line.StartsWith("{") || line.StartsWith("}") || line.StartsWith("//") || String.IsNullOrEmpty(line)) ){
+                        string[] l = line.Split('=');
+                        l[1] = l[1].Split(new string[] {"//"}, StringSplitOptions.None)[0];
+                        opts.Add(l[0].Trim(), l[1].Trim());
+                    }
+                }
+                if(opts.ContainsKey("flow_rate")){
+                    DockingFuelPump.flow_rate = double.Parse(opts["flow_rate"]);
+                }
+                if(opts.ContainsKey("power_drain")){
+                    DockingFuelPump.power_drain = double.Parse(opts["power_drain"]);
+                }
+                if(opts.ContainsKey("transfer_highlighting")){
+                    DockingFuelPump.part_highlighting = bool.Parse(opts["transfer_highlighting"]);
+                }
+                if(opts.ContainsKey("transfer_heating")){
+                    DockingFuelPump.transfer_heating = bool.Parse(opts["transfer_heating"]);
+                }
+            }
+            catch{
+                Debug.Log("[DFP] loading settings failed, using defaults");
+            }
+
+        }
+    }
+
     public class DockingFuelPump : PartModule
     {
-        
-        public void log(string msg){
-            Debug.Log("[DFP] " + msg);
-        }
 
-
-        [KSPEvent(guiActive = true, guiName = "Pump Fuel")]
-        public void pump_out(){
-            start_fuel_pump();
-        }
-
-        [KSPEvent(guiActive = true, guiName = "Stop Pump", active = false)]
-        public void stop_pump_out(){
-            stop_pump();
-        }
+        internal static double flow_rate = 1.0;
+        internal static double power_drain = 0.3;
+        internal static bool part_highlighting = false;
+        internal static bool transfer_heating = true;
 
         //North and South Parts; parts divided in relationship to the docking port. Fuel will be pumped from the south to the north.
         internal List<Part> north_parts = new List<Part>(); //Parts "North" of the docking port are those which are connected via a docking join
@@ -39,10 +65,18 @@ namespace DockingFuelPump
 
         public bool pump_running = false;
         public bool warning_displayed = false;
-        internal double flow_rate = 100.0;
-        internal double power_drain = 0.3;
 
 
+
+        [KSPEvent(guiActive = true, guiName = "Pump Fuel")]
+        public void pump_out(){
+            start_fuel_pump();
+        }
+
+        [KSPEvent(guiActive = true, guiName = "Stop Pump", active = false)]
+        public void stop_pump_out(){
+            stop_pump();
+        }
 
         public void start_fuel_pump(){
             is_docked = false;
@@ -56,7 +90,7 @@ namespace DockingFuelPump
             }
 
             if(is_docked){
-                Debug.Log("Starting  Pump");
+                log("Starting  Pump");
                 Events["pump_out"].active = false;
                 Events["stop_pump_out"].active = true;
 
@@ -64,7 +98,9 @@ namespace DockingFuelPump
                 north_parts = opposite_pump.identify_south_parts();
                 identify_south_resources();
 
-                highlight_parts();
+                if(part_highlighting){
+                    highlight_parts();
+                }
                 pump_running = true;
             }
         }
@@ -73,7 +109,12 @@ namespace DockingFuelPump
             Events["pump_out"].active = true;
             Events["stop_pump_out"].active = false;
             pump_running = false;
-            Debug.Log("Pump stopped");
+            if(part_highlighting){
+                foreach(Part part in FlightGlobals.ActiveVessel.parts){
+                    part.Highlight(false);
+                }
+            }
+            log("Pump stopped");
         }
 
 
@@ -101,7 +142,7 @@ namespace DockingFuelPump
                         }
                     }
                 }
-                double per_tank_flow = flow_rate / required_resources.Count;
+                double per_tank_flow = (flow_rate * 100) / required_resources.Count;
                 per_tank_flow = per_tank_flow * this.part.aerodynamicArea;  //factor size of docking port in rate of flow
                 per_tank_flow = per_tank_flow * TimeWarp.deltaTime;         //factor in physics warp
 
@@ -112,13 +153,15 @@ namespace DockingFuelPump
                         if(resource.resourceName != "ElectricCharge" && resource.amount < resource.maxAmount && source_resources.ContainsKey(resource.resourceName)){
                             List<PartResource> resources = source_resources[resource.resourceName];
 
-                            double required_res = resource.maxAmount - resource.amount;
+                            double required_res = resource.maxAmount - resource.amount;         //the total amount of resource needed in this resource tank
                             double avail_res = 0;
-                            foreach(PartResource res in resources){avail_res += res.amount;}
+                            foreach(PartResource res in resources){avail_res += res.amount;}    //the total amount of resource available in the source tanks.
+                            //select the smallest amount from availabe, required and the per_tank_flow limit
                             double to_transfer = new double[]{required_res, avail_res, per_tank_flow}.Min();
 
-                            resource.amount += to_transfer;
-                            resources_transfered += to_transfer;
+                            resource.amount += to_transfer; //add quantity of resource to tank
+                            resources_transfered += to_transfer;  //and add quantity to track of total resources transfered in this cycle.
+                            //deduct quantity from source tanks, dividing the quantity from the available source tanks.
                             int r_count = resources.Count;
                             foreach(PartResource res in resources){
                                 double max_out = new double[]{ to_transfer/r_count, res.amount }.Min();
@@ -132,11 +175,13 @@ namespace DockingFuelPump
                 }
 
                 //Docking Port heating
-                if(this.part.temperature < this.part.maxTemp * 0.8){
-                    this.part.temperature += 10;
-                }
-                if(docked_to.temperature < docked_to.maxTemp * 0.8){
-                    docked_to.temperature += 10;
+                if(transfer_heating){
+                    if(this.part.temperature < this.part.maxTemp * 0.8){
+                        this.part.temperature += 10;
+                    }
+                    if(docked_to.temperature < docked_to.maxTemp * 0.8){
+                        docked_to.temperature += 10;
+                    }
                 }
 
 
@@ -151,13 +196,11 @@ namespace DockingFuelPump
                 }
 
                 //pump shutdown when dry.
-                log("transfered: " + resources_transfered);
                 if(resources_transfered < 0.01){
                     stop_pump();
                 }
 
                 //pump power draw and shutdown when out of power.
-//                double p = this.part.RequestResource("ElectricCharge", power_drain * resources_transfered);
                 if(this.part.RequestResource("ElectricCharge", power_drain * resources_transfered) <= 0){
                     stop_pump();
                 }
@@ -265,18 +308,19 @@ namespace DockingFuelPump
 
 
         public void highlight_parts(){
-            Debug.Log("North Parts - " + north_parts.Count);
             foreach(Part part in north_parts){
-                Debug.Log(part.name);
                 part.Highlight(Color.blue);
             }
             
-            Debug.Log("South Parts - " + south_parts.Count);
             foreach(Part part in south_parts){
-                Debug.Log(part.name);
                 part.Highlight(Color.green);
             }            
         }
+
+        public void log(string msg){
+            Debug.Log("[DFP] " + msg);
+        }
+
     }
 
 
@@ -335,6 +379,19 @@ namespace DockingFuelPump
     }
 
 
+    public class Paths
+    {
+        //takes any number of strings and returns them joined together with OS specific path divider, ie:
+        //Paths.joined("follow", "the", "yellow", "brick", "road") -> "follow/the/yellow/brick/road or follow\the\yellow\brick\road
+        //actually, not true, now it just joins them with /, as it seems mono sorts out path dividers anyway and using \ just messes things up here. (I mean, what kinda os uses \ anyway, madness).
+        static public string joined(params string[] paths){
+            string path = paths[0];
+            for(int i = 1; i < paths.Length; i++){
+                path = path + "/" + paths[i];
+            }
+            return path;
+        }
+    }
 }
 
 

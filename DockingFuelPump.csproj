@@ -68,5 +68,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\DockingFuelPump.cfg" />
+    <None Include="Assets\dfp_settings.cfg" />
   </ItemGroup>
 </Project>
