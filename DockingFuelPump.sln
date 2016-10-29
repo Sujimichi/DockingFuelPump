@@ -14,4 +14,33 @@ Global
 		{9DE4391E-B789-42C1-AA76-D587D32E1E66}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9DE4391E-B789-42C1-AA76-D587D32E1E66}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
+	GlobalSection(MonoDevelopProperties) = preSolution
+		Policies = $0
+		$0.TextStylePolicy = $1
+		$1.FileWidth = 120
+		$1.EolMarker = Unix
+		$1.inheritsSet = VisualStudio
+		$1.inheritsScope = text/plain
+		$1.scope = text/x-csharp
+		$0.CSharpFormattingPolicy = $2
+		$2.IndentSwitchBody = True
+		$2.InterfaceBraceStyle = EndOfLineWithoutSpace
+		$2.StructBraceStyle = EndOfLineWithoutSpace
+		$2.EnumBraceStyle = EndOfLineWithoutSpace
+		$2.MethodBraceStyle = EndOfLineWithoutSpace
+		$2.AnonymousMethodBraceStyle = EndOfLineWithoutSpace
+		$2.ConstructorBraceStyle = EndOfLineWithoutSpace
+		$2.DestructorBraceStyle = EndOfLineWithoutSpace
+		$2.BeforeMethodDeclarationParentheses = False
+		$2.BeforeMethodCallParentheses = False
+		$2.BeforeConstructorDeclarationParentheses = False
+		$2.NewLineBeforeConstructorInitializerColon = NewLine
+		$2.NewLineAfterConstructorInitializerColon = SameLine
+		$2.BeforeDelegateDeclarationParentheses = False
+		$2.NewParentheses = False
+		$2.SpacesBeforeBrackets = False
+		$2.inheritsSet = Mono
+		$2.inheritsScope = text/x-csharp
+		$2.scope = text/x-csharp
+	EndGlobalSection
 EndGlobal
