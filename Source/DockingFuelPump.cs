@@ -324,61 +324,6 @@ namespace DockingFuelPump
     }
 
 
-
-    public class TestHighlight : PartModule
-    {
-        public void log(string msg){
-            Debug.Log("[DFP] " + msg);
-        }
-
-        [KSPEvent(guiActive = true, guiName = "highlight")]
-        public void test_highligh(){
-            Events["test_highligh"].active = false;
-            Events["clear_highlight"].active = true;
-
-//            Part connected_part; 
-//            connected_part = this.part.attachNodes[1].attachedPart;     //get part attached to lower node on docking port
-//            if(!connected_part){
-//                connected_part = this.part.srfAttachNode.attachedPart;     //get part port is surface attached to
-//            }
-//            connected_part.Highlight(Color.red);
-//
-//            this.part.Highlight(Color.red);
-//            this.part.parent.Highlight(Color.blue);
-//            foreach(Part p in this.part.children){
-//                p.Highlight(Color.green);
-//            }
-
-//            ModuleDockingNode node = this.part.FindModuleImplementing<ModuleDockingNode>();
-//            log((node.otherNode == null).ToString());
-//            node.otherNode.part.Highlight(Color.magenta);
-
-            foreach(PartResource res in this.part.Resources){
-                log("name: " + res.resourceName + " amount: " + res.amount);
-            }
-
-            log("part mass: " + this.part.mass);
-            log("aeroD area: " + this.part.aerodynamicArea.ToString());
-            log("exposed area: " + this.part.exposedArea.ToString());
-            log("surface areas: " + this.part.surfaceAreas.ToString());
-//            DockingFuelPump pump = this.part.FindModuleImplementing<DockingFuelPump>();
-//            bool running = pump.pump_running;
-
-
-
-        }
-
-        [KSPEvent(guiActive = true, guiName = "clear highlight", active = false)]
-        public void clear_highlight(){
-            Events["test_highligh"].active = true;
-            Events["clear_highlight"].active = false;
-            foreach(Part part in FlightGlobals.ActiveVessel.parts){
-                part.Highlight(false);
-            }
-        }
-    }
-
-
     public class Paths
     {
         //takes any number of strings and returns them joined together with OS specific path divider, ie:
