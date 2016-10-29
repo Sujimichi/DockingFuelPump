@@ -39,11 +39,12 @@ namespace DockingFuelPump
 
         public bool pump_running = false;
         public bool warning_displayed = false;
-        internal double flow_rate = 1.0;
+        internal double flow_rate = 100.0;
         internal double power_drain = 0.3;
 
-        public void start_fuel_pump(){
 
+
+        public void start_fuel_pump(){
             is_docked = false;
             warning_displayed = false;
 
@@ -80,8 +81,7 @@ namespace DockingFuelPump
         public override void OnUpdate(){
             //TODO stop pump on undock
             if(pump_running){
-                double resources_transfered = 0;
-
+                double resources_transfered = 0; //keep track of overall quantity of resources transfered across the docking port each cycle. used to auto stop the pump.
 
                 //Calculate the number of resouce tanks that will be transfering resources to determine the per tank flow rate
                 //the aim being to have a max flow rate across the docking port. per tank transfer speed will increase as fewer tanks are engaged in transfer and vice versa.
@@ -101,12 +101,9 @@ namespace DockingFuelPump
                         }
                     }
                 }
-                    
-                int transfer_count = new int[]{ required_resources.Count, avail_resources.Count }.Min();
-
-                double per_tank_flow = flow_rate / transfer_count;
-//                per_tank_flow = per_tank_flow * TimeWarp.deltaTime;
-//                log("transfer count: " + transfer_count + " tank flow: " + per_tank_flow);
+                double per_tank_flow = flow_rate / required_resources.Count;
+                per_tank_flow = per_tank_flow * this.part.aerodynamicArea;  //factor size of docking port in rate of flow
+                per_tank_flow = per_tank_flow * TimeWarp.deltaTime;         //factor in physics warp
 
 
                 //Transfer of resources from South (source) parts to North (sink) parts.
@@ -130,8 +127,6 @@ namespace DockingFuelPump
                                 r_count -= 1;
                             }
                             resource.amount -= to_transfer; //handles case where not all of the to_transfer demand was completely shared but the source resources.
-                            resources_transfered -= to_transfer;
-
                         }
                     }
                 }
@@ -157,7 +152,7 @@ namespace DockingFuelPump
 
                 //pump shutdown when dry.
                 log("transfered: " + resources_transfered);
-                if(resources_transfered < 0.1){
+                if(resources_transfered < 0.01){
                     stop_pump();
                 }
 
@@ -206,11 +201,9 @@ namespace DockingFuelPump
                 connected_parts.Add(this.part.srfAttachNode.attachedPart);
             }
 
-
             //Find all the parts which are "south" of the docking port". South means parts which are connected to the non-docking side of the docking port.
             List<Part> new_parts = new List<Part>();  //used in intterating over associated parts, two lists are used so one can be modified while itterating over the other.
             List<Part> next_parts = new List<Part>();
-
 
             south_parts.Clear();
             foreach(Part part in connected_parts){
@@ -255,7 +248,6 @@ namespace DockingFuelPump
                 if(south_parts.Count > FlightGlobals.ActiveVessel.parts.Count){ 
                     itterate = false;
                 }
-
             }
 
             //filter south parts to just those with resources.
@@ -268,10 +260,9 @@ namespace DockingFuelPump
                     }
                 }
             }
-
             return south_parts;
-
         }
+
 
         public void highlight_parts(){
             Debug.Log("North Parts - " + north_parts.Count);
@@ -322,6 +313,10 @@ namespace DockingFuelPump
                 log("name: " + res.resourceName + " amount: " + res.amount);
             }
 
+            log("part mass: " + this.part.mass);
+            log("aeroD area: " + this.part.aerodynamicArea.ToString());
+            log("exposed area: " + this.part.exposedArea.ToString());
+            log("surface areas: " + this.part.surfaceAreas.ToString());
 //            DockingFuelPump pump = this.part.FindModuleImplementing<DockingFuelPump>();
 //            bool running = pump.pump_running;
 
