@@ -8,51 +8,6 @@ using UnityEngine;
 
 namespace DockingFuelPump
 {
-	public class TestHighlight : PartModule
-	{
-		public void log(string msg){
-			Debug.Log("[DFP] " + msg);
-		}
-
-		[KSPEvent(guiActive = true, guiName = "highlight")]
-		public void test_highligh(){
-			Events["test_highligh"].active = false;
-			Events["clear_highlight"].active = true;
-
-//			Part connected_part; 
-//			connected_part = this.part.attachNodes[1].attachedPart; 	//get part attached to lower node on docking port
-//			if(!connected_part){
-//				connected_part = this.part.srfAttachNode.attachedPart; 	//get part port is surface attached to
-//			}
-//			connected_part.Highlight(Color.red);
-//
-//			this.part.Highlight(Color.red);
-//			this.part.parent.Highlight(Color.blue);
-//			foreach(Part p in this.part.children){
-//				p.Highlight(Color.green);
-//			}
-
-//			ModuleDockingNode node = this.part.FindModuleImplementing<ModuleDockingNode>();
-//			node.otherNode.part.Highlight(Color.magenta);
-
-//			DockingFuelPump pump = this.part.FindModuleImplementing<DockingFuelPump>();
-//			bool running = pump.pump_running;
-
-
-
-		}
-
-		[KSPEvent(guiActive = true, guiName = "clear highlight", active = false)]
-		public void clear_highlight(){
-			Events["test_highligh"].active = true;
-			Events["clear_highlight"].active = false;
-			foreach(Part part in FlightGlobals.ActiveVessel.parts){
-				part.Highlight(false);
-			}
-		}
-	}
-
-
 
 	public class DockingFuelPump : PartModule
 	{
@@ -62,7 +17,7 @@ namespace DockingFuelPump
 		}
 
 
-		[KSPEvent(guiActive = true, guiName = "Pump Fuel (out)")]
+		[KSPEvent(guiActive = true, guiName = "Pump Fuel")]
 		public void pump_out(){
 			start_fuel_pump();
 		}
@@ -103,13 +58,15 @@ namespace DockingFuelPump
 
 
 		public override void OnUpdate(){
+			//TODO stop pump on undock
 			ModuleDockingNode node = this.part.FindModuleImplementing<ModuleDockingNode>();
+			double resources_transfered = 0;
 			if(pump_running && node.otherNode){
 				Part docked_to = node.otherNode.part;
 				DockingFuelPump opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
 
 
-				double resources_transfered = 0;
+				//Transfer of resources from South (source) parts to North (sink) parts.
 				foreach(Part sink_part in north_parts){
 					foreach(PartResource resource in sink_part.Resources){
 						if(resource.amount < resource.maxAmount && source_resources.ContainsKey(resource.resourceName)){
@@ -120,7 +77,7 @@ namespace DockingFuelPump
 							foreach(PartResource res in resources){
 								avail_res += res.amount;
 							}
-							double to_transfer = new double[]{required_res, avail_res, 5.0 * TimeWarp.deltaTime}.Min();
+							double to_transfer = new double[]{required_res, avail_res, 15.0 * TimeWarp.deltaTime}.Min();
 
 							resource.amount += to_transfer;
 							resources_transfered += to_transfer;
@@ -131,30 +88,26 @@ namespace DockingFuelPump
 								to_transfer -= max_out;
 								r_count -= 1;
 							}
+							resource.amount -= to_transfer; //handles case where not all of the to_transfer demand was completely shared but the source resources.
 						}
 					}
 				}
-//
-				if(this.part.thermalExposedFlux < 100){
-					this.part.thermalExposedFlux += 50;
+
+				//Docking Port heating
+				double k = 2.5;
+				if(this.part.thermalExposedFlux < this.part.thermalMass * k){
+					this.part.thermalExposedFlux += this.part.thermalMass * (k/2);
 				}
-				if(docked_to.thermalExposedFlux < 100){
-					docked_to.thermalExposedFlux += 50;
+				if(docked_to.thermalExposedFlux < docked_to.thermalMass * k){
+					docked_to.thermalExposedFlux += docked_to.thermalMass * (k/2);
 				}
 
-//				if(this.part.thermalInternalFlux < 600){
-//					this.part.thermalInternalFlux += 400;
-//				}
-//				if(this.part.thermalSkinFlux < 400){
-//					this.part.thermalSkinFlux += 80;
-//				}
+				//Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
 				if(opposite_pump.pump_running){
 					if(!warning_displayed){
 						log("opposite pump running - imminent KABOOM likely!");
 						warning_displayed = true;
 					}
-					//						this.part.explode();
-					//						docked_to.explode();
 					if(this.part.thermalInternalFlux < 800){
 						this.part.thermalInternalFlux += 600;
 					}
@@ -163,8 +116,14 @@ namespace DockingFuelPump
 					}
 				}
 
+				//pump shutdown when dry.
+				if(resources_transfered < 0.1){
+					stop_pump();
+				}
 
-				if(resources_transfered < 0.01){
+				//pump power draw and shutdown when out of power.
+				double p = this.part.RequestResource("ElectricCharge", 0.3 * resources_transfered);
+				if(p <= 0){
 					stop_pump();
 				}
 			}
@@ -277,6 +236,55 @@ namespace DockingFuelPump
 		}
 
 	}
+
+
+
+//	public class TestHighlight : PartModule
+//	{
+//		public void log(string msg){
+//			Debug.Log("[DFP] " + msg);
+//		}
+//
+//		[KSPEvent(guiActive = true, guiName = "highlight")]
+//		public void test_highligh(){
+//			Events["test_highligh"].active = false;
+//			Events["clear_highlight"].active = true;
+//
+//			//			Part connected_part; 
+//			//			connected_part = this.part.attachNodes[1].attachedPart; 	//get part attached to lower node on docking port
+//			//			if(!connected_part){
+//			//				connected_part = this.part.srfAttachNode.attachedPart; 	//get part port is surface attached to
+//			//			}
+//			//			connected_part.Highlight(Color.red);
+//			//
+//			//			this.part.Highlight(Color.red);
+//			//			this.part.parent.Highlight(Color.blue);
+//			//			foreach(Part p in this.part.children){
+//			//				p.Highlight(Color.green);
+//			//			}
+//
+//			//			ModuleDockingNode node = this.part.FindModuleImplementing<ModuleDockingNode>();
+//			//			node.otherNode.part.Highlight(Color.magenta);
+//
+//			//			DockingFuelPump pump = this.part.FindModuleImplementing<DockingFuelPump>();
+//			//			bool running = pump.pump_running;
+//
+//			log(this.part.thermalMass.ToString());
+//
+//
+//		}
+//
+//		[KSPEvent(guiActive = true, guiName = "clear highlight", active = false)]
+//		public void clear_highlight(){
+//			Events["test_highligh"].active = true;
+//			Events["clear_highlight"].active = false;
+//			foreach(Part part in FlightGlobals.ActiveVessel.parts){
+//				part.Highlight(false);
+//			}
+//		}
+//	}
+
+
 }
 
 //			Debug.Log("North Parts - " + north_parts.Count);
