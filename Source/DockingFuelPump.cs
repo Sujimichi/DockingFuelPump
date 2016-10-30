@@ -83,12 +83,10 @@ namespace DockingFuelPump
             warning_displayed = false;
             ModuleDockingNode node = this.part.FindModuleImplementing<ModuleDockingNode>();
             if(node != null && node.otherNode){
-                log("checking d-port");
                 docked_to = node.otherNode.part;
                 opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
                 is_docked = true;
             }else{
-                log("checking grab");
                 ModuleGrappleNode grab = this.part.FindModuleImplementing<ModuleGrappleNode>();
                 if(grab != null && grab.otherVesselInfo != null){
                     foreach(Part p in FlightGlobals.ActiveVessel.parts){
@@ -96,12 +94,11 @@ namespace DockingFuelPump
                             docked_to = p;
                         }
                     }
-//                    opposite_pump = this.part;
-                    is_docked = true;
+                    if(docked_to){
+                        is_docked = true;
+                    }
                 }
             }
-
-            log("HERE");
 
             if(is_docked){
                 log("Starting  Pump");
@@ -109,18 +106,18 @@ namespace DockingFuelPump
                 Events["stop_pump_out"].active = true;
 
                 south_parts.Clear();
-                south_parts = identify_south_parts(this.part);
+                south_parts = get_descendant_parts(this.part);
                 if(opposite_pump){
-                    north_parts = opposite_pump.identify_south_parts(opposite_pump.part);
+                    north_parts = opposite_pump.get_descendant_parts(opposite_pump.part);
                 }else{
-                    north_parts = identify_south_parts(docked_to);
-//                    north_parts.Clear();
-//                    foreach(Part p in vessel.parts){
-//                        if(!group_part_ids(south_parts).Contains(p.GetInstanceID())){
-//                            north_parts.Add(p);
-//                        }
-//                    }
+                    north_parts = get_descendant_parts(docked_to);
                 }
+                foreach (Part p in south_parts) {
+                    if(north_parts.Contains(p)){
+                        north_parts.Remove(p);
+                    }
+                }
+
                 identify_south_resources();
 
                 if(part_highlighting){
@@ -201,10 +198,10 @@ namespace DockingFuelPump
 
                 //Docking Port heating
                 if(transfer_heating){
-                    if(this.part.temperature < this.part.maxTemp * 0.8){
+                    if(this.part.temperature < this.part.maxTemp * 0.7){
                         this.part.temperature += 10;
                     }
-                    if(docked_to.temperature < docked_to.maxTemp * 0.8){
+                    if(docked_to.temperature < docked_to.maxTemp * 0.7){
                         docked_to.temperature += 10;
                     }
                 }
@@ -216,11 +213,12 @@ namespace DockingFuelPump
                         log("opposite pump running - imminent KABOOM likely!");
                         warning_displayed = true;
                     }
-                    this.part.temperature += 10;
-                    docked_to.temperature += 10;
+                    this.part.temperature += 20;
+                    docked_to.temperature += 20;
                 }
 
                 //pump shutdown when dry.
+                log("transfered: " + resources_transfered);
                 if(resources_transfered < 0.01){
                     stop_pump();
                 }
@@ -234,8 +232,8 @@ namespace DockingFuelPump
 
 
 
-        //Get array of IDs of parts already added to south parts.
-        public List<int> group_part_ids(List<Part> parts){
+        //Get array of IDs for all parts in list of parts
+        public List<int> part_ids_for(List<Part> parts){
             //part_ids.Clear();
             List<int> part_ids = new List<int>();
             foreach(Part part in parts){
@@ -258,32 +256,26 @@ namespace DockingFuelPump
 
         }
 
-        public List<Part> identify_south_parts(Part focual_part){
-            //Find the part(s) the docking port is attached to (either by node or surface attach)
-            List<Part> parts_group = new List<Part>();
+        public List<Part> get_descendant_parts(Part focal_part){
+            List<Part> descendant_parts = new List<Part>();
             List<Part> connected_parts = new List<Part>(); 
+            List<Part> next_parts = new List<Part>();
             List<int> part_ids = new List<int>();
 
-            foreach(AttachNode node in focual_part.attachNodes){
+            //Find the part(s) the focal_part (typically the docking port) is attached to (either by node or surface attach)
+            foreach(AttachNode node in focal_part.attachNodes){
                 if(node.attachedPart){
                     connected_parts.Add(node.attachedPart);
                 }
             }
-            if(focual_part.srfAttachNode.attachedPart){
-                connected_parts.Add(focual_part.srfAttachNode.attachedPart);
+            if(focal_part.srfAttachNode.attachedPart){
+                connected_parts.Add(focal_part.srfAttachNode.attachedPart);
             }
-
             log("connected parts: " + connected_parts.Count);
 
             //Find all the parts which are "south" of the docking port". South means parts which are connected to the non-docking side of the docking port.
-            List<Part> new_parts = new List<Part>();  //used in intterating over associated parts, two lists are used so one can be modified while itterating over the other.
-            List<Part> next_parts = new List<Part>();
-
-//            south_parts.Clear();
-            foreach(Part part in connected_parts){
-                new_parts.Add(part);     //add the part the docking port is connected to as the starting point
-            }
-            parts_group.Add(focual_part);    //south_parts include the docking port so it will be excluded from subsequent passes
+            descendant_parts.Add(focal_part);    //descendant_parts include the focal_part so it will be excluded from subsequent passes
+            descendant_parts.Add(this.part.parent);
 
             //starting with the connected_part (in new_parts) find it's parent and children parts and add them to next_parts. 
             //once itterated over new_parts the parent and children parts which were added to next_parts are added to new_parts and south_parts 
@@ -295,47 +287,46 @@ namespace DockingFuelPump
                 next_parts.Clear();
 
                 //select parents and children of parts in new_parts and add them to next_parts.
-                foreach(Part part in new_parts){
+                foreach(Part part in connected_parts){
                     if (part.parent) {
                         next_parts.Add(part.parent);
                     }
-                    foreach(Part p in part.children){
+                    foreach (Part p in part.children) {
                         next_parts.Add(p);
                     }
                 }
 
                 //add any parts in next_parts which are not already in south_parts to south_parts and new_parts
                 //if next_parts is empty then exit the loop.
-                new_parts.Clear();
+                connected_parts.Clear();
                 itterate = false;
                 if (next_parts.Count > 0) {
                     itterate = true;
                     foreach (Part part in next_parts) {
-                        
-                        if(!group_part_ids(parts_group).Contains(part.GetInstanceID()) && part.fuelCrossFeed){
-                            new_parts.Add(part);
-                            parts_group.Add(part);
+                        if(!part_ids_for(descendant_parts).Contains(part.GetInstanceID()) && part.fuelCrossFeed){
+                            connected_parts.Add(part);
+                            descendant_parts.Add(part);
                         }
                     }
                 }
 
                 //ensure the loop will end if the above check fails.
-                if(parts_group.Count > FlightGlobals.ActiveVessel.parts.Count){ 
+                if(descendant_parts.Count > FlightGlobals.ActiveVessel.parts.Count){ 
                     itterate = false;
                 }
             }
 
             //filter south parts to just those with resources.
-            part_ids = group_part_ids(parts_group);
-            parts_group.Clear();
+            part_ids = part_ids_for(descendant_parts);
+            descendant_parts.Clear();
             foreach(Part part in FlightGlobals.ActiveVessel.parts){
                 if (part.Resources.Count > 0) {
                     if (part_ids.Contains(part.GetInstanceID())) {
-                        parts_group.Add(part);
+                        descendant_parts.Add(part);
                     }
                 }
             }
-            return parts_group;
+            return descendant_parts;
         }
 
 
@@ -343,7 +334,6 @@ namespace DockingFuelPump
             foreach(Part part in north_parts){
                 part.Highlight(Color.blue);
             }
-            
             foreach(Part part in south_parts){
                 part.Highlight(Color.green);
             }            
@@ -369,26 +359,16 @@ namespace DockingFuelPump
 
         [KSPEvent(guiActive = true, guiName = "highlight")]
         public void test_highligh(){
-//            Events["test_highligh"].active = false;
-//            Events["clear_highlight"].active = true;
+            Events["test_highligh"].active = false;
+            Events["clear_highlight"].active = true;
 
 
-            ModuleDockingNode node = this.part.FindModuleImplementing<ModuleDockingNode>();
-            if(node && node.otherNode){
-                docked_to = node.otherNode.part;
-                opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
-                is_docked = true;
-            }else{
-                ModuleGrappleNode grab = this.part.FindModuleImplementing<ModuleGrappleNode>();
-                if(grab != null && grab.otherVesselInfo != null){
-                    foreach(Part p in FlightGlobals.ActiveVessel.parts){
-                        if(p.flightID == grab.dockedPartUId){
-                            docked_to = p;
-                        }
-                    }
-                    is_docked = true;
-                }
+            this.part.Highlight(Color.red);
+            this.part.parent.Highlight(Color.blue);
+            foreach(Part part in this.part.children){
+                part.Highlight(Color.green);
             }
+
 
 
 
