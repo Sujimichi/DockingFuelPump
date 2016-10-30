@@ -81,6 +81,8 @@ namespace DockingFuelPump
         public void start_fuel_pump(){
             is_docked = false;
             warning_displayed = false;
+
+
             ModuleDockingNode node = this.part.FindModuleImplementing<ModuleDockingNode>();
             if(node != null && node.otherNode){
                 docked_to = node.otherNode.part;
@@ -105,21 +107,15 @@ namespace DockingFuelPump
                 Events["pump_out"].active = false;
                 Events["stop_pump_out"].active = true;
 
-                south_parts.Clear();
                 south_parts = get_descendant_parts(this.part);
-                if(opposite_pump){
-                    north_parts = opposite_pump.get_descendant_parts(opposite_pump.part);
-                }else{
-                    north_parts = get_descendant_parts(docked_to);
-                }
-                foreach (Part p in south_parts) {
-                    if(north_parts.Contains(p)){
-                        north_parts.Remove(p);
-                    }
-                }
-
-                identify_south_resources();
-
+                north_parts = get_descendant_parts(docked_to);
+//                foreach (Part p in south_parts) {   //handles a case (when used with the claw) where one part ends up in both groups.
+//                    if(north_parts.Contains(p)){north_parts.Remove(p);}
+//                }
+                log("south part count: " + south_parts.Count);
+                log("north part count: " + north_parts.Count);
+                identify_source_resources();
+                log("HERE");
                 if(part_highlighting){
                     highlight_parts();
                 }
@@ -143,6 +139,7 @@ namespace DockingFuelPump
 
         public override void OnUpdate(){
             //TODO stop pump on undock
+            //TODO stop pump on explode 
             if(pump_running){
                 double resources_transfered = 0; //keep track of overall quantity of resources transfered across the docking port each cycle. used to auto stop the pump.
 
@@ -164,9 +161,9 @@ namespace DockingFuelPump
                         }
                     }
                 }
-                double per_tank_flow = (flow_rate * 100) / required_resources.Count;
-                per_tank_flow = per_tank_flow * this.part.aerodynamicArea;  //factor size of docking port in rate of flow
-                per_tank_flow = per_tank_flow * TimeWarp.deltaTime;         //factor in physics warp
+                double per_tank_flow = (flow_rate * 1) / required_resources.Count;
+//                per_tank_flow = per_tank_flow * this.part.aerodynamicArea;  //factor size of docking port in rate of flow
+//                per_tank_flow = per_tank_flow * TimeWarp.deltaTime;         //factor in physics warp
 
 
                 //Transfer of resources from South (source) parts to North (sink) parts.
@@ -198,12 +195,17 @@ namespace DockingFuelPump
 
                 //Docking Port heating
                 if(transfer_heating){
-                    if(this.part.temperature < this.part.maxTemp * 0.7){
-                        this.part.temperature += 10;
-                    }
-                    if(docked_to.temperature < docked_to.maxTemp * 0.7){
-                        docked_to.temperature += 10;
-                    }
+                    this.part.temperature = this.part.maxTemp * 0.7;
+                    docked_to.temperature = docked_to.maxTemp * 0.7;
+                        
+//                    if(this.part.temperature < this.part.maxTemp * 0.6){
+//                        this.part.temperature += 50;
+////                        this.part.AddThermalFlux(1000);
+//                    }
+//                    if(docked_to.temperature < docked_to.maxTemp * 0.6){
+//                        docked_to.temperature += 50;
+////                        this.part.AddThermalFlux(1000);
+//                    }
                 }
 
 
@@ -224,43 +226,22 @@ namespace DockingFuelPump
                 }
 
                 //pump power draw and shutdown when out of power.
-                if(this.part.RequestResource("ElectricCharge", power_drain * resources_transfered) <= 0){
-                    stop_pump();
-                }
-            }
-        }
-
-
-
-        //Get array of IDs for all parts in list of parts
-        public List<int> part_ids_for(List<Part> parts){
-            //part_ids.Clear();
-            List<int> part_ids = new List<int>();
-            foreach(Part part in parts){
-                part_ids.Add(part.GetInstanceID());
-            }
-            return part_ids;
-        }
-
-        //setup dictionary of resource name to list of available Part resources on the south parts.
-        internal void identify_south_resources(){
-            source_resources = new Dictionary<string, List<PartResource>>();
-            foreach(Part part in south_parts){
-                foreach(PartResource res in part.Resources){
-                    if(!source_resources.ContainsKey(res.resourceName)){
-                        source_resources.Add(res.resourceName, new List<PartResource>());
+                if(power_drain > 0 && resources_transfered > 0){
+                    if(this.part.RequestResource("ElectricCharge", power_drain * resources_transfered) <= 0){
+                        stop_pump();
                     }
-                    source_resources[res.resourceName].Add(res);
                 }
             }
-
         }
+
+
+
+
 
         public List<Part> get_descendant_parts(Part focal_part){
             List<Part> descendant_parts = new List<Part>();
             List<Part> connected_parts = new List<Part>(); 
             List<Part> next_parts = new List<Part>();
-            List<int> part_ids = new List<int>();
 
             //Find the part(s) the focal_part (typically the docking port) is attached to (either by node or surface attach)
             foreach(AttachNode node in focal_part.attachNodes){
@@ -273,20 +254,19 @@ namespace DockingFuelPump
             }
             log("connected parts: " + connected_parts.Count);
 
-            //Find all the parts which are "south" of the docking port". South means parts which are connected to the non-docking side of the docking port.
-            descendant_parts.Add(focal_part);    //descendant_parts include the focal_part so it will be excluded from subsequent passes
-            descendant_parts.Add(this.part.parent);
 
-            //starting with the connected_part (in new_parts) find it's parent and children parts and add them to next_parts. 
-            //once itterated over new_parts the parent and children parts which were added to next_parts are added to new_parts and south_parts 
-            //so long as they are not already in south parts.  The loop then repeats with the new set of new_parts.  When no more parts are added to 
-            //next_parts the loop is stopped.
-            //in other words, walking the tree structure to recursively discover parts which fall on one side (the south side) of the docking port.
+
+            //Walk the tree structure of connected parts to recursively discover parts which fall on one side (the south side) of the focal part.
+            //The starting point is the parts in connected_parts.  By adding the focal part and this part's parent to descendant_parts they are excluded
+            //which acts to block the discovery of parts in one direction
+            descendant_parts.Add(focal_part);    //descendant_parts include the focal_part so it will be excluded from subsequent passes
+            descendant_parts.Add(this.part.parent); //this was neccessary for use with the claw, doesn't effect use with docking ports.
+            
             bool itterate = true;
             while(itterate){
                 next_parts.Clear();
 
-                //select parents and children of parts in new_parts and add them to next_parts.
+                //select parents and children of parts in connected_parts and add them to next_parts.
                 foreach(Part part in connected_parts){
                     if (part.parent) {
                         next_parts.Add(part.parent);
@@ -296,7 +276,7 @@ namespace DockingFuelPump
                     }
                 }
 
-                //add any parts in next_parts which are not already in south_parts to south_parts and new_parts
+                //add any parts in next_parts which are not already in descendant_parts to descendant_parts and new_parts
                 //if next_parts is empty then exit the loop.
                 connected_parts.Clear();
                 itterate = false;
@@ -316,8 +296,8 @@ namespace DockingFuelPump
                 }
             }
 
-            //filter south parts to just those with resources.
-            part_ids = part_ids_for(descendant_parts);
+            //filter descendant_parts to be just those which have resources.
+            List<int> part_ids = part_ids_for(descendant_parts);
             descendant_parts.Clear();
             foreach(Part part in FlightGlobals.ActiveVessel.parts){
                 if (part.Resources.Count > 0) {
@@ -330,6 +310,29 @@ namespace DockingFuelPump
         }
 
 
+        //Get array of IDs for all parts in a list of parts
+        public List<int> part_ids_for(List<Part> parts){
+            List<int> part_ids = new List<int>();
+            foreach(Part part in parts){
+                part_ids.Add(part.GetInstanceID());
+            }
+            return part_ids;
+        }
+
+        //setup dictionary of resource name to list of available PartResource(s) on the source (south) parts.
+        internal void identify_source_resources(){
+            source_resources = new Dictionary<string, List<PartResource>>();
+            foreach(Part part in south_parts){
+                foreach(PartResource res in part.Resources){
+                    if(!source_resources.ContainsKey(res.resourceName)){
+                        source_resources.Add(res.resourceName, new List<PartResource>());
+                    }
+                    source_resources[res.resourceName].Add(res);
+                }
+            }
+        }
+
+        //adds different highlight to south and north parts
         public void highlight_parts(){
             foreach(Part part in north_parts){
                 part.Highlight(Color.blue);
@@ -339,6 +342,7 @@ namespace DockingFuelPump
             }            
         }
 
+        //debug log shorthand
         public void log(string msg){
             Debug.Log("[DFP] " + msg);
         }
