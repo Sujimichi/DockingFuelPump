@@ -45,6 +45,30 @@ namespace DockingFuelPump
         }
     }
 
+    public class ClawFuelPump : DockingFuelPump{
+
+        public override void get_docked_info(){
+            docked_to = find_attached_part();
+            if(docked_to){
+                is_docked = true;
+            }
+        }
+
+        internal Part find_attached_part(){
+            Part attached_part = null;
+            ModuleGrappleNode module = this.part.FindModuleImplementing<ModuleGrappleNode>();
+            if(module.otherVesselInfo != null){
+                foreach(Part part in FlightGlobals.ActiveVessel.parts){
+                    if(part.flightID == module.dockedPartUId){
+                        attached_part = part;
+                    }
+                }
+            }
+            return attached_part;
+        }
+
+    }
+
     public class DockingFuelPump : PartModule
     {
 
@@ -56,8 +80,8 @@ namespace DockingFuelPump
         //North and South Parts; parts divided in relationship to the docking port. Fuel will be pumped from the south to the north.
         internal List<Part> north_parts = new List<Part>(); //Parts "North" of the docking port are those which are connected via a docking join
         internal List<Part> south_parts = new List<Part>();    //Parts "South" of the docking port are those which are connected via the attachment node on the docking port
-//        internal List<int> part_ids = new List<int>();        //List of part ids, used in checking which parts have been added to south_parts.
         internal Dictionary<string, List<PartResource>> source_resources = new Dictionary<string, List<PartResource>>();
+
 
         internal bool is_docked = false;
         internal Part docked_to;
@@ -75,32 +99,14 @@ namespace DockingFuelPump
 
         [KSPEvent(guiActive = true, guiName = "Stop Pump", active = false)]
         public void stop_pump_out(){
-            stop_pump();
+            stop_fuel_pump();
         }
 
         public void start_fuel_pump(){
             is_docked = false;
             warning_displayed = false;
 
-
-            ModuleDockingNode node = this.part.FindModuleImplementing<ModuleDockingNode>();
-            if(node != null && node.otherNode){
-                docked_to = node.otherNode.part;
-                opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
-                is_docked = true;
-            }else{
-                ModuleGrappleNode grab = this.part.FindModuleImplementing<ModuleGrappleNode>();
-                if(grab != null && grab.otherVesselInfo != null){
-                    foreach(Part p in FlightGlobals.ActiveVessel.parts){
-                        if(p.flightID == grab.dockedPartUId){
-                            docked_to = p;
-                        }
-                    }
-                    if(docked_to){
-                        is_docked = true;
-                    }
-                }
-            }
+            get_docked_info();
 
             if(is_docked){
                 log("Starting  Pump");
@@ -109,141 +115,35 @@ namespace DockingFuelPump
 
                 south_parts = get_descendant_parts(this.part);
                 north_parts = get_descendant_parts(docked_to);
-//                foreach (Part p in south_parts) {   //handles a case (when used with the claw) where one part ends up in both groups.
-//                    if(north_parts.Contains(p)){north_parts.Remove(p);}
-//                }
-                log("south part count: " + south_parts.Count);
-                log("north part count: " + north_parts.Count);
                 identify_source_resources();
-                log("HERE");
-                if(part_highlighting){
-                    highlight_parts();
-                }
+                highlight_parts();
                 pump_running = true;
             }
         }
     
-        public void stop_pump(){
+        public void stop_fuel_pump(){
             Events["pump_out"].active = true;
             Events["stop_pump_out"].active = false;
             pump_running = false;
-            if(part_highlighting){
-                foreach(Part part in FlightGlobals.ActiveVessel.parts){
-                    part.Highlight(false);
-                }
-            }
             log("Pump stopped");
+            unhighlight_parts();
         }
 
 
-
-        public override void OnUpdate(){
-            //TODO stop pump on undock
-            //TODO stop pump on explode 
-            if(pump_running){
-                double resources_transfered = 0; //keep track of overall quantity of resources transfered across the docking port each cycle. used to auto stop the pump.
-
-                //Calculate the number of resouce tanks that will be transfering resources to determine the per tank flow rate
-                //the aim being to have a max flow rate across the docking port. per tank transfer speed will increase as fewer tanks are engaged in transfer and vice versa.
-                List<string> required_resources = new List<string>();
-                List<string> avail_resources = new List<string>();
-                foreach (KeyValuePair<string, List<PartResource>> res_list in source_resources) {
-                    foreach(PartResource res in res_list.Value){
-                        if(res.resourceName != "ElectricCharge" && res.amount > 0.01){
-                            avail_resources.Add(res.resourceName);
-                        }
-                    }
-                }
-                foreach (Part sink_part in north_parts) {
-                    foreach (PartResource resource in sink_part.Resources) {
-                        if (resource.resourceName != "ElectricCharge" && resource.amount < resource.maxAmount && avail_resources.Contains(resource.resourceName)) {
-                            required_resources.Add(resource.resourceName);
-                        }
-                    }
-                }
-                double per_tank_flow = (flow_rate * 1) / required_resources.Count;
-//                per_tank_flow = per_tank_flow * this.part.aerodynamicArea;  //factor size of docking port in rate of flow
-//                per_tank_flow = per_tank_flow * TimeWarp.deltaTime;         //factor in physics warp
-
-
-                //Transfer of resources from South (source) parts to North (sink) parts.
-                foreach(Part sink_part in north_parts){
-                    foreach(PartResource resource in sink_part.Resources){
-                        if(resource.resourceName != "ElectricCharge" && resource.amount < resource.maxAmount && source_resources.ContainsKey(resource.resourceName)){
-                            List<PartResource> resources = source_resources[resource.resourceName];
-
-                            double required_res = resource.maxAmount - resource.amount;         //the total amount of resource needed in this resource tank
-                            double avail_res = 0;
-                            foreach(PartResource res in resources){avail_res += res.amount;}    //the total amount of resource available in the source tanks.
-                            //select the smallest amount from availabe, required and the per_tank_flow limit
-                            double to_transfer = new double[]{required_res, avail_res, per_tank_flow}.Min();
-
-                            resource.amount += to_transfer; //add quantity of resource to tank
-                            resources_transfered += to_transfer;  //and add quantity to track of total resources transfered in this cycle.
-                            //deduct quantity from source tanks, dividing the quantity from the available source tanks.
-                            int r_count = resources.Count;
-                            foreach(PartResource res in resources){
-                                double max_out = new double[]{ to_transfer/r_count, res.amount }.Min();
-                                res.amount -= max_out;
-                                to_transfer -= max_out;
-                                r_count -= 1;
-                            }
-                            resource.amount -= to_transfer; //handles case where not all of the to_transfer demand was completely shared but the source resources.
-                        }
-                    }
-                }
-
-                //Docking Port heating
-                if(transfer_heating){
-                    this.part.temperature = this.part.maxTemp * 0.7;
-                    docked_to.temperature = docked_to.maxTemp * 0.7;
-                        
-//                    if(this.part.temperature < this.part.maxTemp * 0.6){
-//                        this.part.temperature += 50;
-////                        this.part.AddThermalFlux(1000);
-//                    }
-//                    if(docked_to.temperature < docked_to.maxTemp * 0.6){
-//                        docked_to.temperature += 50;
-////                        this.part.AddThermalFlux(1000);
-//                    }
-                }
-
-
-                //Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
-                if(opposite_pump && opposite_pump.pump_running){
-                    if(!warning_displayed){
-                        log("opposite pump running - imminent KABOOM likely!");
-                        warning_displayed = true;
-                    }
-                    this.part.temperature += 20;
-                    docked_to.temperature += 20;
-                }
-
-                //pump shutdown when dry.
-                log("transfered: " + resources_transfered);
-                if(resources_transfered < 0.01){
-                    stop_pump();
-                }
-
-                //pump power draw and shutdown when out of power.
-                if(power_drain > 0 && resources_transfered > 0){
-                    if(this.part.RequestResource("ElectricCharge", power_drain * resources_transfered) <= 0){
-                        stop_pump();
-                    }
-                }
+        //set info about the docking.  if the part is docked this set's is_docked to true and sets docked_to to be the part it is docked with.
+        public virtual void get_docked_info(){
+            ModuleDockingNode module = this.part.FindModuleImplementing<ModuleDockingNode>();
+            if(module.otherNode){
+                docked_to = module.otherNode.part;
+                opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
+                is_docked = true;
             }
         }
 
-
-
-
-
-        public List<Part> get_descendant_parts(Part focal_part){
-            List<Part> descendant_parts = new List<Part>();
+        //Find the part(s) the focal_part (typically the docking port) is attached to (either by node or surface attach), 
+        //but not the parts it is docked to.
+        public List<Part> get_connected_parts(Part focal_part){
             List<Part> connected_parts = new List<Part>(); 
-            List<Part> next_parts = new List<Part>();
-
-            //Find the part(s) the focal_part (typically the docking port) is attached to (either by node or surface attach)
             foreach(AttachNode node in focal_part.attachNodes){
                 if(node.attachedPart){
                     connected_parts.Add(node.attachedPart);
@@ -252,15 +152,21 @@ namespace DockingFuelPump
             if(focal_part.srfAttachNode.attachedPart){
                 connected_parts.Add(focal_part.srfAttachNode.attachedPart);
             }
-            log("connected parts: " + connected_parts.Count);
+            connected_parts.Remove(docked_to);
+            return connected_parts;
+        }
 
+
+        public List<Part> get_descendant_parts(Part focal_part){
+            List<Part> descendant_parts = new List<Part>();
+            List<Part> next_parts = new List<Part>();
+            List<Part> connected_parts = get_connected_parts(focal_part);
 
 
             //Walk the tree structure of connected parts to recursively discover parts which fall on one side (the south side) of the focal part.
-            //The starting point is the parts in connected_parts.  By adding the focal part and this part's parent to descendant_parts they are excluded
+            //The starting point is the parts in connected_parts.  By adding the focal part to descendant_parts they are excluded
             //which acts to block the discovery of parts in one direction
-            descendant_parts.Add(focal_part);    //descendant_parts include the focal_part so it will be excluded from subsequent passes
-            descendant_parts.Add(this.part.parent); //this was neccessary for use with the claw, doesn't effect use with docking ports.
+            descendant_parts.Add(focal_part);    
             
             bool itterate = true;
             while(itterate){
@@ -283,7 +189,8 @@ namespace DockingFuelPump
                 if (next_parts.Count > 0) {
                     itterate = true;
                     foreach (Part part in next_parts) {
-                        if(!part_ids_for(descendant_parts).Contains(part.GetInstanceID()) && part.fuelCrossFeed){
+                        bool allow_flow = part.fuelCrossFeed || part.FindModuleImplementing<ModuleGrappleNode>();
+                        if(!part_ids_for(descendant_parts).Contains(part.GetInstanceID()) && allow_flow){
                             connected_parts.Add(part);
                             descendant_parts.Add(part);
                         }
@@ -319,6 +226,7 @@ namespace DockingFuelPump
             return part_ids;
         }
 
+
         //setup dictionary of resource name to list of available PartResource(s) on the source (south) parts.
         internal void identify_source_resources(){
             source_resources = new Dictionary<string, List<PartResource>>();
@@ -332,14 +240,122 @@ namespace DockingFuelPump
             }
         }
 
+
+
+        public override void OnUpdate(){
+            //TODO stop pump on undock
+            //TODO stop pump on explode 
+            if(pump_running){
+                double resources_transfered = 0; //keep track of overall quantity of resources transfered across the docking port each cycle. used to auto stop the pump.
+
+                //Calculate the number of resouce tanks that will be transfering resources to determine the per tank flow rate
+                //the aim being to have a max flow rate across the docking port. per tank transfer speed will increase as fewer tanks are engaged in transfer and vice versa.
+                List<string> required_resources = new List<string>();
+                List<string> avail_resources = new List<string>();
+                foreach (KeyValuePair<string, List<PartResource>> res_list in source_resources) {
+                    foreach(PartResource res in res_list.Value){
+                        if(res.resourceName != "ElectricCharge" && res.amount > 0.01){
+                            avail_resources.Add(res.resourceName);
+                        }
+                    }
+                }
+                foreach (Part sink_part in north_parts) {
+                    foreach (PartResource resource in sink_part.Resources) {
+                        if (resource.resourceName != "ElectricCharge" && resource.amount < resource.maxAmount && avail_resources.Contains(resource.resourceName)) {
+                            required_resources.Add(resource.resourceName);
+                        }
+                    }
+                }
+                double per_tank_flow = (flow_rate * 4) / required_resources.Count;
+                //                per_tank_flow = per_tank_flow * this.part.aerodynamicArea;  //factor size of docking port in rate of flow
+                //                per_tank_flow = per_tank_flow * TimeWarp.deltaTime;         //factor in physics warp
+
+
+                //Transfer of resources from South (source) parts to North (sink) parts.
+                foreach(Part sink_part in north_parts){
+                    foreach(PartResource resource in sink_part.Resources){
+                        if(resource.resourceName != "ElectricCharge" && resource.amount < resource.maxAmount && source_resources.ContainsKey(resource.resourceName)){
+                            List<PartResource> resources = source_resources[resource.resourceName];
+
+                            double required_res = resource.maxAmount - resource.amount;         //the total amount of resource needed in this resource tank
+                            double avail_res = 0;
+                            foreach(PartResource res in resources){avail_res += res.amount;}    //the total amount of resource available in the source tanks.
+                            //select the smallest amount from availabe, required and the per_tank_flow limit
+                            double to_transfer = new double[]{required_res, avail_res, per_tank_flow}.Min();
+
+                            resource.amount += to_transfer; //add quantity of resource to tank
+                            resources_transfered += to_transfer;  //and add quantity to track of total resources transfered in this cycle.
+                            //deduct quantity from source tanks, dividing the quantity from the available source tanks.
+                            int r_count = resources.Count;
+                            foreach(PartResource res in resources){
+                                double max_out = new double[]{ to_transfer/r_count, res.amount }.Min();
+                                res.amount -= max_out;
+                                to_transfer -= max_out;
+                                r_count -= 1;
+                            }
+                            resource.amount -= to_transfer; //handles case where not all of the to_transfer demand was completely shared but the source resources.
+                        }
+                    }
+                }
+
+                //Docking Port heating
+                if(transfer_heating){
+                    if(this.part.temperature < this.part.maxTemp * 0.7){
+                        this.part.temperature += 50;
+                    }
+                    if(docked_to.temperature < docked_to.maxTemp * 0.7){
+                        docked_to.temperature += 50;
+                    }
+                }
+
+
+                //Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
+                if(opposite_pump && opposite_pump.pump_running){
+                    if(!warning_displayed){
+                        log("opposite pump running - imminent KABOOM likely!");
+                        warning_displayed = true;
+                    }
+                    this.part.temperature += 20;
+                    docked_to.temperature += 20;
+                }
+
+                //pump shutdown when dry.
+                log("transfered: " + resources_transfered);
+                if(resources_transfered < 0.01){
+                    stop_fuel_pump();
+                }
+
+                //pump power draw and shutdown when out of power.
+                if(power_drain > 0 && resources_transfered > 0){
+                    if(this.part.RequestResource("ElectricCharge", power_drain * resources_transfered) <= 0){
+                        stop_fuel_pump();
+                    }
+                }
+            }
+        }
+
+
+
         //adds different highlight to south and north parts
         public void highlight_parts(){
-            foreach(Part part in north_parts){
-                part.Highlight(Color.blue);
+            if (part_highlighting) {
+                foreach (Part part in north_parts) {
+                    part.Highlight(Color.blue);
+                }
+                foreach (Part part in south_parts) {
+                    part.Highlight(Color.green);
+                }            
             }
-            foreach(Part part in south_parts){
-                part.Highlight(Color.green);
-            }            
+        }
+
+        //remove highlighting from parts.
+        public void unhighlight_parts(){
+            if(part_highlighting){
+                foreach(Part part in FlightGlobals.ActiveVessel.parts){
+                    part.Highlight(false);
+                }
+            }
+
         }
 
         //debug log shorthand
@@ -348,6 +364,11 @@ namespace DockingFuelPump
         }
 
     }
+
+
+
+
+
 
 
 
@@ -373,7 +394,7 @@ namespace DockingFuelPump
                 part.Highlight(Color.green);
             }
 
-
+            log(this.part.fuelCrossFeed.ToString());
 
 
         }
