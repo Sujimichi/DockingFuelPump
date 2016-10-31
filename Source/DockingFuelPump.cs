@@ -262,7 +262,7 @@ namespace DockingFuelPump
             if(pump_running){
                 double resources_transfered = 0; //keep track of overall quantity of resources transfered across the docking port each cycle. used to auto stop the pump.
 
-
+                //find the types of resources which need to be transfered
                 List<string> required_resource_types = new List<string>();
                 foreach (Part sink_part in north_parts) {
                     foreach (PartResource resource in sink_part.Resources) {
@@ -274,28 +274,31 @@ namespace DockingFuelPump
 
 
                 foreach(string res_name in required_resource_types){
+                    Dictionary<string, int> active_tanks = new Dictionary<string, int>(){    {"available", 0},   {"required", 0} }; //count of the number of resource tanks engaged in transfer
+                    Dictionary<string, double> volumes   = new Dictionary<string, double>(){ {"available", 0.0}, {"required", 0.0}, {"rate", 0.0} }; //holds the total available vs total required
+                    //amount of current resource.  Also holds the max rate value as the min of all these values is used to define the amount to be transfered in this cycle.
 
-                    double avail = 0;
-                    int avail_tanks = 0;
+                    //count the number of available/required tanks and resource totals.
                     foreach(PartResource res in source_resources[res_name]){
                         if(res.amount > 0){
-                            avail_tanks += 1;
+                            active_tanks["available"] += 1;
+                            volumes["available"] += res.amount;
                         }
-                        avail += res.amount;
                     }    
-
-                    double required = 0;
-                    int required_tanks = 0;
                     foreach(PartResource res in sink_resources[res_name]){
                         if(res.maxAmount - res.amount > 0){
-                            required_tanks += 1;
+                            active_tanks["required"] += 1;
+                            volumes["required"] += (res.maxAmount - res.amount);
                         }
-                        required += (res.maxAmount - res.amount);
                     }    
-                    double rate = 10.0 / new int[]{ avail_tanks, required_tanks }.Min();
-                    double to_transfer = new double[]{ avail, required, rate }.Min();
 
+                    volumes["rate"] = (flow_rate * 500) / active_tanks.Values.Min(); //rate is set as the flow_rate divided by the smallest number of active tanks.
+                    volumes["rate"] = volumes["rate"] * this.part.aerodynamicArea;  //factor size of docking port in rate of flow
+                    volumes["rate"] = volumes["rate"] * TimeWarp.deltaTime;         //factor in physics warp
 
+                    double to_transfer = volumes.Values.Min();  //the amount to transfer is selected as the min of either the required or available resources or the rate (which acts as a max flow value).
+
+                    //transfer resources between source and sink tanks.
                     int i = sink_resources[res_name].Count;
                     foreach (PartResource res in sink_resources[res_name]) {
                         double max_t = new double[]{ to_transfer/i, (res.maxAmount - res.amount) }.Min();
@@ -309,12 +312,10 @@ namespace DockingFuelPump
                             double max_t2 = new double[]{ max_t/j, s_res.amount }.Min();
                             s_res.amount -= max_t2;
                             max_t -= max_t2;
-//                            resources_transfered += max_t2;
                             j -= 1;
                         }
                         res.amount -= max_t;
                         resources_transfered -= max_t;
-
                     }
                 }
                             
