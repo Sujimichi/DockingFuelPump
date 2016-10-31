@@ -280,8 +280,8 @@ namespace DockingFuelPump
                     foreach(PartResource res in source_resources[res_name]){
                         if(res.amount > 0){
                             avail_tanks += 1;
-                            avail += res.amount;
                         }
+                        avail += res.amount;
                     }    
 
                     double required = 0;
@@ -289,8 +289,8 @@ namespace DockingFuelPump
                     foreach(PartResource res in sink_resources[res_name]){
                         if(res.maxAmount - res.amount > 0){
                             required_tanks += 1;
-                            required += (res.maxAmount - res.amount);
                         }
+                        required += (res.maxAmount - res.amount);
                     }    
                     double rate = 10.0 / new int[]{ avail_tanks, required_tanks }.Min();
                     double to_transfer = new double[]{ avail, required, rate }.Min();
@@ -301,6 +301,7 @@ namespace DockingFuelPump
                         double max_t = new double[]{ to_transfer/i, (res.maxAmount - res.amount) }.Min();
                         res.amount += max_t;
                         to_transfer -= max_t;
+                        resources_transfered += max_t;
                         i -= 1;
 
                         int j = source_resources[res_name].Count;
@@ -308,7 +309,7 @@ namespace DockingFuelPump
                             double max_t2 = new double[]{ max_t/j, s_res.amount }.Min();
                             s_res.amount -= max_t2;
                             max_t -= max_t2;
-                            resources_transfered += max_t2;
+//                            resources_transfered += max_t2;
                             j -= 1;
                         }
                         res.amount -= max_t;
@@ -318,56 +319,6 @@ namespace DockingFuelPump
                 }
                             
 
-
-//                //Calculate the number of resouce tanks that will be transfering resources to determine the per tank flow rate
-//                //the aim being to have a max flow rate across the docking port. per tank transfer speed will increase as fewer tanks are engaged in transfer and vice versa.
-//                List<string> required_resources = new List<string>();
-//                List<string> avail_resources = new List<string>();
-//                foreach (KeyValuePair<string, List<PartResource>> res_list in source_resources) {
-//                    foreach(PartResource res in res_list.Value){
-//                        if(res.resourceName != "ElectricCharge" && res.amount > 0.01){
-//                            avail_resources.Add(res.resourceName);
-//                        }
-//                    }
-//                }
-//                foreach (Part sink_part in north_parts) {
-//                    foreach (PartResource resource in sink_part.Resources) {
-//                        if (resource.resourceName != "ElectricCharge" && resource.amount < resource.maxAmount && avail_resources.Contains(resource.resourceName)) {
-//                            required_resources.Add(resource.resourceName);
-//                        }
-//                    }
-//                }
-//                double per_tank_flow = (flow_rate * 4) / required_resources.Count;
-//                //                per_tank_flow = per_tank_flow * this.part.aerodynamicArea;  //factor size of docking port in rate of flow
-//                //                per_tank_flow = per_tank_flow * TimeWarp.deltaTime;         //factor in physics warp
-//
-//
-//                //Transfer of resources from South (source) parts to North (sink) parts.
-//                foreach(Part sink_part in north_parts){
-//                    foreach(PartResource resource in sink_part.Resources){
-//                        if(resource.resourceName != "ElectricCharge" && resource.amount < resource.maxAmount && source_resources.ContainsKey(resource.resourceName)){
-//                            List<PartResource> resources = source_resources[resource.resourceName];
-//
-//                            double required_res = resource.maxAmount - resource.amount;         //the total amount of resource needed in this resource tank
-//                            double avail_res = 0;
-//                            foreach(PartResource res in resources){avail_res += res.amount;}    //the total amount of resource available in the source tanks.
-//                            //select the smallest amount from availabe, required and the per_tank_flow limit
-//                            double to_transfer = new double[]{required_res, avail_res, per_tank_flow}.Min();
-//
-//                            resource.amount += to_transfer; //add quantity of resource to tank
-//                            resources_transfered += to_transfer;  //and add quantity to track of total resources transfered in this cycle.
-//                            //deduct quantity from source tanks, dividing the quantity from the available source tanks.
-//                            int r_count = resources.Count;
-//                            foreach(PartResource res in resources){
-//                                double max_out = new double[]{ to_transfer/r_count, res.amount }.Min();
-//                                res.amount -= max_out;
-//                                to_transfer -= max_out;
-//                                r_count -= 1;
-//                            }
-//                            resource.amount -= to_transfer; //handles case where not all of the to_transfer demand was completely shared but the source resources.
-//                        }
-//                    }
-//                }
 
                 //Docking Port heating
                 if(transfer_heating){
@@ -497,3 +448,53 @@ namespace DockingFuelPump
 }
 
 
+
+//                //Calculate the number of resouce tanks that will be transfering resources to determine the per tank flow rate
+//                //the aim being to have a max flow rate across the docking port. per tank transfer speed will increase as fewer tanks are engaged in transfer and vice versa.
+//                List<string> required_resources = new List<string>();
+//                List<string> avail_resources = new List<string>();
+//                foreach (KeyValuePair<string, List<PartResource>> res_list in source_resources) {
+//                    foreach(PartResource res in res_list.Value){
+//                        if(res.resourceName != "ElectricCharge" && res.amount > 0.01){
+//                            avail_resources.Add(res.resourceName);
+//                        }
+//                    }
+//                }
+//                foreach (Part sink_part in north_parts) {
+//                    foreach (PartResource resource in sink_part.Resources) {
+//                        if (resource.resourceName != "ElectricCharge" && resource.amount < resource.maxAmount && avail_resources.Contains(resource.resourceName)) {
+//                            required_resources.Add(resource.resourceName);
+//                        }
+//                    }
+//                }
+//                double per_tank_flow = (flow_rate * 4) / required_resources.Count;
+//                //                per_tank_flow = per_tank_flow * this.part.aerodynamicArea;  //factor size of docking port in rate of flow
+//                //                per_tank_flow = per_tank_flow * TimeWarp.deltaTime;         //factor in physics warp
+//
+//
+//                //Transfer of resources from South (source) parts to North (sink) parts.
+//                foreach(Part sink_part in north_parts){
+//                    foreach(PartResource resource in sink_part.Resources){
+//                        if(resource.resourceName != "ElectricCharge" && resource.amount < resource.maxAmount && source_resources.ContainsKey(resource.resourceName)){
+//                            List<PartResource> resources = source_resources[resource.resourceName];
+//
+//                            double required_res = resource.maxAmount - resource.amount;         //the total amount of resource needed in this resource tank
+//                            double avail_res = 0;
+//                            foreach(PartResource res in resources){avail_res += res.amount;}    //the total amount of resource available in the source tanks.
+//                            //select the smallest amount from availabe, required and the per_tank_flow limit
+//                            double to_transfer = new double[]{required_res, avail_res, per_tank_flow}.Min();
+//
+//                            resource.amount += to_transfer; //add quantity of resource to tank
+//                            resources_transfered += to_transfer;  //and add quantity to track of total resources transfered in this cycle.
+//                            //deduct quantity from source tanks, dividing the quantity from the available source tanks.
+//                            int r_count = resources.Count;
+//                            foreach(PartResource res in resources){
+//                                double max_out = new double[]{ to_transfer/r_count, res.amount }.Min();
+//                                res.amount -= max_out;
+//                                to_transfer -= max_out;
+//                                r_count -= 1;
+//                            }
+//                            resource.amount -= to_transfer; //handles case where not all of the to_transfer demand was completely shared but the source resources.
+//                        }
+//                    }
+//                }
