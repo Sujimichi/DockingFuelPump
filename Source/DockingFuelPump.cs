@@ -45,45 +45,7 @@ namespace DockingFuelPump
         }
     }
 
-    public class ClawFuelPump : DockingFuelPump{
 
-        [KSPEvent(guiActive = true, guiName = "Extract Fuel")]
-        public void pump_in(){
-            reverse_pump = true;
-            start_fuel_pump();
-        }
-
-        public override void get_docked_info(){
-            docked_to = find_attached_part();
-            if(docked_to){
-                is_docked = true;
-            }
-        }
-
-        public override void get_part_groups(){
-            if (reverse_pump) {
-                south_parts = get_descendant_parts(docked_to);
-                north_parts = get_descendant_parts(this.part);
-            } else {
-                south_parts = get_descendant_parts(this.part);
-                north_parts = get_descendant_parts(docked_to);
-            }
-        }
-
-        internal Part find_attached_part(){
-            Part attached_part = null;
-            ModuleGrappleNode module = this.part.FindModuleImplementing<ModuleGrappleNode>();
-            if(module.otherVesselInfo != null){
-                foreach(Part part in FlightGlobals.ActiveVessel.parts){
-                    if(part.flightID == module.dockedPartUId){
-                        attached_part = part;
-                    }
-                }
-            }
-            return attached_part;
-        }
-
-    }
 
     public class DockingFuelPump : PartModule
     {
@@ -121,27 +83,44 @@ namespace DockingFuelPump
             stop_fuel_pump();
         }
 
-        public void start_fuel_pump(){
+        //setup events to stop the fuel pump when the port is undocked or it goes kaboomy
+        public override void OnStart(StartState state){
+            this.part.OnJustAboutToBeDestroyed += () => {
+                if(pump_running){
+                    stop_fuel_pump();
+                    if(opposite_pump){
+                        opposite_pump.stop_fuel_pump();
+                    }
+                }
+            };
+            GameEvents.onPartUndock.Add((part) => {
+                DockingFuelPump module = part.FindModuleImplementing<DockingFuelPump>();
+                if(module){
+                    log("undocking...pump stop");
+                    module.stop_fuel_pump();
+                }
+            });
+        }
+
+
+        public virtual void start_fuel_pump(){
             is_docked = false;
             warning_displayed = false;
 
             get_docked_info();
-
             if(is_docked){
-                log("Starting  Pump");
+                log("Starting Fuel Pump");
                 Events["pump_out"].active = false;
                 Events["stop_pump_out"].active = true;
-
                 get_part_groups();
-                identify_source_resources();
-                identify_sink_resources();
-
+                source_resources = identify_resources_in_parts(south_parts);
+                sink_resources   = identify_resources_in_parts(north_parts);
                 highlight_parts();
                 pump_running = true;
             }
         }
     
-        public void stop_fuel_pump(){
+        public virtual void stop_fuel_pump(){
             Events["pump_out"].active = true;
             Events["stop_pump_out"].active = false;
             pump_running = false;
@@ -160,6 +139,8 @@ namespace DockingFuelPump
             }
         }
 
+        //get vessl parts (just those with resources) in two groups. Those on the opposite side of this.part to the part it is docked to (the south parts)
+        //and those on (and connected to) the part this.part is docked to (the north parts). 
         public virtual void get_part_groups(){
             south_parts = get_descendant_parts(this.part);
             north_parts = get_descendant_parts(docked_to);
@@ -181,16 +162,13 @@ namespace DockingFuelPump
             return connected_parts;
         }
 
-
+        //Walk the tree structure of connected parts to recursively discover parts which are on the side of the given focal part opposite to the part it is docked to.
+        //Walking the tree is blocked by parts which do not have cross feed enabled.
         public List<Part> get_descendant_parts(Part focal_part){
             List<Part> descendant_parts = new List<Part>();
             List<Part> next_parts = new List<Part>();
             List<Part> connected_parts = get_connected_parts(focal_part);
 
-
-            //Walk the tree structure of connected parts to recursively discover parts which fall on one side (the south side) of the focal part.
-            //The starting point is the parts in connected_parts.  By adding the focal part to descendant_parts they are excluded
-            //which acts to block the discovery of parts in one direction
             descendant_parts.Add(focal_part);    
             
             bool itterate = true;
@@ -252,35 +230,21 @@ namespace DockingFuelPump
         }
 
 
-        //setup dictionary of resource name to list of available PartResource(s) on the source (south) parts.
-        internal void identify_source_resources(){
-            source_resources = new Dictionary<string, List<PartResource>>();
-            foreach(Part part in south_parts){
+        //setup dictionary of resource name to list of available PartResource(s) in the given list of parts
+        internal Dictionary<string, List<PartResource>> identify_resources_in_parts(List<Part> parts){
+            Dictionary<string, List<PartResource>> resources = new Dictionary<string, List<PartResource>>();
+            foreach(Part part in parts){
                 foreach(PartResource res in part.Resources){
-                    if(!source_resources.ContainsKey(res.resourceName)){
-                        source_resources.Add(res.resourceName, new List<PartResource>());
+                    if(!resources.ContainsKey(res.resourceName)){
+                        resources.Add(res.resourceName, new List<PartResource>());
                     }
-                    source_resources[res.resourceName].Add(res);
+                    resources[res.resourceName].Add(res);
                 }
             }
+            return resources;
         }
-
-        internal void identify_sink_resources(){
-            sink_resources = new Dictionary<string, List<PartResource>>();
-            foreach(Part part in north_parts){
-                foreach(PartResource res in part.Resources){
-                    if(!sink_resources.ContainsKey(res.resourceName)){
-                        sink_resources.Add(res.resourceName, new List<PartResource>());
-                    }
-                    sink_resources[res.resourceName].Add(res);
-                }
-            }
-        }
-
 
         public override void OnUpdate(){
-            //TODO stop pump on undock
-            //TODO stop pump on explode 
             if(pump_running){
                 double resources_transfered = 0; //keep track of overall quantity of resources transfered across the docking port each cycle. used to auto stop the pump.
 
@@ -314,34 +278,40 @@ namespace DockingFuelPump
                         }
                     }    
 
-                    volumes["rate"] = (flow_rate * 500) / active_tanks.Values.Min(); //rate is set as the flow_rate divided by the smallest number of active tanks.
-                    volumes["rate"] = volumes["rate"] * this.part.aerodynamicArea;  //factor size of docking port in rate of flow
+                    //calculate the rate at which to transfer this resouce from each tank, based on how many tanks are active in transfer, size of docking port and time warp
+                    volumes["rate"] = (flow_rate * 500) / active_tanks.Values.Min();//rate is set as the flow_rate divided by the smallest number of active tanks.
+                    volumes["rate"] = volumes["rate"] * this.part.aerodynamicArea;  //factor size of docking port in rate of flow (larger docking ports have high flow rate).
                     volumes["rate"] = volumes["rate"] * TimeWarp.deltaTime;         //factor in physics warp
 
-                    double to_transfer = volumes.Values.Min();  //the amount to transfer is selected as the min of either the required or available resources or the rate (which acts as a max flow value).
+                    double to_transfer = volumes.Values.Min();  //the amount to transfer is selected as the min of either the required or available 
+                    //resources or the rate (which acts as a max flow value).
 
                     //transfer resources between source and sink tanks.
                     int i = sink_resources[res_name].Count;
                     foreach (PartResource res in sink_resources[res_name]) {
-                        double max_t = new double[]{ to_transfer/i, (res.maxAmount - res.amount) }.Min();
-                        res.amount += max_t;
-                        to_transfer -= max_t;
-                        resources_transfered += max_t;
-                        i -= 1;
+                        //calcualte how much to transfer into a tank
+                        double max_t = new double[]{ to_transfer/i, (res.maxAmount - res.amount) }.Min(); //calc the max to be transfered into this tank
+                        //either as amount remaining to transfer divided by number of tanks remaining to transfer into OR free space in tank, whichever is smaller
+                        res.amount += max_t;            //add the amount to the tank
+                        to_transfer -= max_t;           //and deduct it from remaining amount to transfer
+                        resources_transfered += max_t;  //add amount added to overall track of transfered resources
+                        i -= 1;                         //reduce count of remaining tanks to transfer to
 
+                        //extract the amount added to tank from source tanks.
                         int j = source_resources[res_name].Count;
                         foreach (PartResource s_res in source_resources[res_name]) {
-                            double max_t2 = new double[]{ max_t/j, s_res.amount }.Min();
-                            s_res.amount -= max_t2;
-                            max_t -= max_t2;
-                            j -= 1;
+                            double max_e = new double[]{ max_t/j, s_res.amount }.Min(); //calc the max to extract as either the total amount added 
+                            //(max_t) over number of source tanks OR take the available anount in the tank, which ever is smaller
+                            s_res.amount -= max_e;  //deduct amonut from tank
+                            max_t -= max_e;         //and deduct it from the amount remaining to extract
+                            j -= 1;                 //reduce the count of remaining tanks to extract from
                         }
+                        //handle rounding errors - res.amount is a double, so division of doubles can result in rounding errors.  The descrepancy is 
+                        //the amount remaining on max_t, so the descrepency is deducted from the sink tank (and from the total overall transfer).
                         res.amount -= max_t;
                         resources_transfered -= max_t;
                     }
                 }
-                            
-
 
                 //Docking Port heating
                 if(transfer_heating){
@@ -352,7 +322,6 @@ namespace DockingFuelPump
                         docked_to.temperature += 50;
                     }
                 }
-
 
                 //Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
                 if(opposite_pump && opposite_pump.pump_running){
@@ -365,7 +334,7 @@ namespace DockingFuelPump
                 }
 
                 //pump shutdown when dry.
-                log("transfered: " + resources_transfered);
+//                log("transfered: " + resources_transfered);
                 if(resources_transfered < 0.01){
                     stop_fuel_pump();
                 }
@@ -411,7 +380,59 @@ namespace DockingFuelPump
     }
 
 
+    //Alterations to base DockingFuelPump class to enable it to work with the Claw
+    public class ClawFuelPump : DockingFuelPump
+    {
 
+        [KSPEvent(guiActive = true, guiName = "Extract Fuel")]
+        public void pump_in(){
+            reverse_pump = true;
+            start_fuel_pump();
+        }
+
+        public override void stop_fuel_pump(){
+            Events["pump_in"].active = true;
+            base.stop_fuel_pump();
+        }
+
+        public override void start_fuel_pump(){
+            base.start_fuel_pump();
+            if (is_docked) {
+                Events["pump_in"].active = false;
+            }
+        }
+
+        public override void get_docked_info(){
+            docked_to = find_attached_part();
+            if(docked_to){
+                is_docked = true;
+            }
+        }
+
+        public override void get_part_groups(){
+            if (reverse_pump) {
+                south_parts = get_descendant_parts(docked_to);
+                north_parts = get_descendant_parts(this.part);
+            } else {
+                south_parts = get_descendant_parts(this.part);
+                north_parts = get_descendant_parts(docked_to);
+            }
+        }
+
+        internal Part find_attached_part(){
+            Part attached_part = null;
+            ModuleGrappleNode module = this.part.FindModuleImplementing<ModuleGrappleNode>();
+            if(module.otherVesselInfo != null){
+                foreach(Part part in FlightGlobals.ActiveVessel.parts){
+                    if(part.flightID == module.dockedPartUId){
+                        attached_part = part;
+                    }
+                }
+            }
+            return attached_part;
+        }
+
+    }
 
 
 
@@ -433,14 +454,17 @@ namespace DockingFuelPump
             Events["clear_highlight"].active = true;
 
 
-            this.part.Highlight(Color.red);
-            this.part.parent.Highlight(Color.blue);
-            foreach(Part part in this.part.children){
-                part.Highlight(Color.green);
-            }
+//            this.part.Highlight(Color.red);
+//            this.part.parent.Highlight(Color.blue);
+//            foreach(Part part in this.part.children){
+//                part.Highlight(Color.green);
+//            }
 
-            log(this.part.fuelCrossFeed.ToString());
-
+            ModuleDockingNode module = this.part.FindModuleImplementing<ModuleDockingNode>();
+            log(module.state);
+//            module.state = ModuleDockingNode.StartState.None;
+            module.otherNode = null;
+            log(module.state);
 
         }
 
