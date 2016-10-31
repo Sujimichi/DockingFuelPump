@@ -47,10 +47,26 @@ namespace DockingFuelPump
 
     public class ClawFuelPump : DockingFuelPump{
 
+        [KSPEvent(guiActive = true, guiName = "Extract Fuel")]
+        public void pump_in(){
+            reverse_pump = true;
+            start_fuel_pump();
+        }
+
         public override void get_docked_info(){
             docked_to = find_attached_part();
             if(docked_to){
                 is_docked = true;
+            }
+        }
+
+        public override void get_part_groups(){
+            if (reverse_pump) {
+                south_parts = get_descendant_parts(docked_to);
+                north_parts = get_descendant_parts(this.part);
+            } else {
+                south_parts = get_descendant_parts(this.part);
+                north_parts = get_descendant_parts(docked_to);
             }
         }
 
@@ -87,6 +103,7 @@ namespace DockingFuelPump
         internal bool is_docked = false;
         internal Part docked_to;
         internal DockingFuelPump opposite_pump;
+        internal bool reverse_pump = false;
 
         public bool pump_running = false;
         public bool warning_displayed = false;
@@ -95,6 +112,7 @@ namespace DockingFuelPump
 
         [KSPEvent(guiActive = true, guiName = "Pump Fuel")]
         public void pump_out(){
+            reverse_pump = false;
             start_fuel_pump();
         }
 
@@ -114,8 +132,7 @@ namespace DockingFuelPump
                 Events["pump_out"].active = false;
                 Events["stop_pump_out"].active = true;
 
-                south_parts = get_descendant_parts(this.part);
-                north_parts = get_descendant_parts(docked_to);
+                get_part_groups();
                 identify_source_resources();
                 identify_sink_resources();
 
@@ -141,6 +158,11 @@ namespace DockingFuelPump
                 opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
                 is_docked = true;
             }
+        }
+
+        public virtual void get_part_groups(){
+            south_parts = get_descendant_parts(this.part);
+            north_parts = get_descendant_parts(docked_to);
         }
 
         //Find the part(s) the focal_part (typically the docking port) is attached to (either by node or surface attach), 
