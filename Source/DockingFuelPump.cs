@@ -46,7 +46,6 @@ namespace DockingFuelPump
     }
 
 
-
     public class DockingFuelPump : PartModule
     {
 
@@ -435,49 +434,46 @@ namespace DockingFuelPump
     }
 
 
-
-
-
-    public class TestHighlight : PartModule
-    {
-        public void log(string msg){
-            Debug.Log("[DFP] " + msg);
-        }
-
-        internal bool is_docked = false;
-        internal Part docked_to;
-        internal DockingFuelPump opposite_pump;
-
-        [KSPEvent(guiActive = true, guiName = "highlight")]
-        public void test_highligh(){
-            Events["test_highligh"].active = false;
-            Events["clear_highlight"].active = true;
-
-
-//            this.part.Highlight(Color.red);
-//            this.part.parent.Highlight(Color.blue);
-//            foreach(Part part in this.part.children){
-//                part.Highlight(Color.green);
+//    public class TestHighlight : PartModule
+//    {
+//        public void log(string msg){
+//            Debug.Log("[DFP] " + msg);
+//        }
+//
+//        internal bool is_docked = false;
+//        internal Part docked_to;
+//        internal DockingFuelPump opposite_pump;
+//
+//        [KSPEvent(guiActive = true, guiName = "highlight")]
+//        public void test_highligh(){
+//            Events["test_highligh"].active = false;
+//            Events["clear_highlight"].active = true;
+//
+//
+////            this.part.Highlight(Color.red);
+////            this.part.parent.Highlight(Color.blue);
+////            foreach(Part part in this.part.children){
+////                part.Highlight(Color.green);
+////            }
+//
+//            ModuleDockingNode module = this.part.FindModuleImplementing<ModuleDockingNode>();
+//            log(module.state);
+////            module.state = ModuleDockingNode.StartState.None;
+//            module.otherNode = null;
+//            log(module.state);
+//
+//        }
+//
+//        [KSPEvent(guiActive = true, guiName = "clear highlight", active = false)]
+//        public void clear_highlight(){
+//            Events["test_highligh"].active = true;
+//            Events["clear_highlight"].active = false;
+//            foreach(Part part in FlightGlobals.ActiveVessel.parts){
+//                part.Highlight(false);
 //            }
-
-            ModuleDockingNode module = this.part.FindModuleImplementing<ModuleDockingNode>();
-            log(module.state);
-//            module.state = ModuleDockingNode.StartState.None;
-            module.otherNode = null;
-            log(module.state);
-
-        }
-
-        [KSPEvent(guiActive = true, guiName = "clear highlight", active = false)]
-        public void clear_highlight(){
-            Events["test_highligh"].active = true;
-            Events["clear_highlight"].active = false;
-            foreach(Part part in FlightGlobals.ActiveVessel.parts){
-                part.Highlight(false);
-            }
-        }
-    }
-
+//        }
+//    }
+//
 
     public class Paths
     {
