@@ -1,7 +1,7 @@
 #Docking Fuel Pump                                
 
 A Kerbal Space Program Mod.    
-that does.....stuff....
+This mod adds a fuel pump to docking ports that will transfer resources from one side of the docking port to the other with a single click.  Intended for easy refuelling of docked craft.
 
 
 ####Licence
