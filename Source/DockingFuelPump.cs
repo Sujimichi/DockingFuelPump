@@ -261,26 +261,30 @@ namespace DockingFuelPump
 
 
                 foreach(string res_name in required_resource_types){
-                    Dictionary<string, int> active_tanks = new Dictionary<string, int>(){    {"available", 0},   {"required", 0} }; //count of the number of resource tanks engaged in transfer
-                    Dictionary<string, double> volumes   = new Dictionary<string, double>(){ {"available", 0.0}, {"required", 0.0}, {"rate", 0.0} }; //holds the total available vs total required
-                    //amount of current resource.  Also holds the max rate value as the min of all these values is used to define the amount to be transfered in this cycle.
+                    //holds the total available vs total required amount of current resource.  Also holds the max rate value as the min of all 
+                    //these values is used to define the amount to be transfered in this cycle.
+                    Dictionary<string, double> volumes = new Dictionary<string, double>(){ {"available", 0.0}, {"required", 0.0}, {"rate", 0.0} }; 
+                    //holds the resource tanks which have resouces to transfer and those which require resources
+                    Dictionary<string, List<PartResource>> tanks = new Dictionary<string, List<PartResource>>(){ 
+                        {"available", new List<PartResource>()}, {"required", new List<PartResource>()} 
+                    };
 
-                    //count the number of available/required tanks and resource totals.
+                    //collect the available/required tanks and resource totals.
                     foreach(PartResource res in source_resources[res_name]){
                         if(res.amount > 0 && res.flowState){
-                            active_tanks["available"] += 1;
+                            tanks["available"].Add(res);
                             volumes["available"] += res.amount;
                         }
                     }    
                     foreach(PartResource res in sink_resources[res_name]){
                         if(res.maxAmount - res.amount > 0 && res.flowState){
-                            active_tanks["required"] += 1;
+                            tanks["required"].Add(res);
                             volumes["required"] += (res.maxAmount - res.amount);
                         }
                     }    
 
                     //calculate the rate at which to transfer this resouce from each tank, based on how many tanks are active in transfer, size of docking port and time warp
-                    volumes["rate"] = (flow_rate * 500) / active_tanks.Values.Min();//rate is set as the flow_rate divided by the smallest number of active tanks.
+                    volumes["rate"] = (flow_rate * 500) / new int[]{tanks["available"].Count, tanks["required"].Count}.Min();//rate is set as the flow_rate divided by the smallest number of active tanks.
                     volumes["rate"] = volumes["rate"] * this.part.aerodynamicArea;  //factor size of docking port in rate of flow (larger docking ports have high flow rate).
                     volumes["rate"] = volumes["rate"] * TimeWarp.deltaTime;         //factor in physics warp
 
@@ -288,33 +292,29 @@ namespace DockingFuelPump
                     //resources or the rate (which acts as a max flow value).
 
                     //transfer resources between source and sink tanks.
-                    int i = sink_resources[res_name].Count;
-                    foreach (PartResource res in sink_resources[res_name]) {
+                    int i = tanks["required"].Count;
+                    foreach (PartResource res in tanks["required"] ) {
                         //calcualte how much to transfer into a tank
-                        if(res.flowState){
-                            double max_t = new double[]{ to_transfer/i, (res.maxAmount - res.amount) }.Min(); //calc the max to be transfered into this tank
-                            //either as amount remaining to transfer divided by number of tanks remaining to transfer into OR free space in tank, whichever is smaller
-                            res.amount += max_t;            //add the amount to the tank
-                            to_transfer -= max_t;           //and deduct it from remaining amount to transfer
-                            resources_transfered += max_t;  //add amount added to overall track of transfered resources
-
-                            //extract the amount added to tank from source tanks.
-                            int j = source_resources[res_name].Count;
-                            foreach (PartResource s_res in source_resources[res_name]) {
-                                if(s_res.flowState){
-                                    double max_e = new double[]{ max_t/j, s_res.amount }.Min(); //calc the max to extract as either the total amount added 
-                                    //(max_t) over number of source tanks OR take the available anount in the tank, which ever is smaller
-                                    s_res.amount -= max_e;  //deduct amonut from tank
-                                    max_t -= max_e;         //and deduct it from the amount remaining to extract
-                                }
-                                j -= 1;                 //reduce the count of remaining tanks to extract from
-                            }
-                            //handle rounding errors - res.amount is a double, so division of doubles can result in rounding errors.  The descrepancy is 
-                            //the amount remaining on max_t, so the descrepency is deducted from the sink tank (and from the total overall transfer).
-                            res.amount -= max_t;
-                            resources_transfered -= max_t;
-                        }
+                        double max_t = new double[]{ to_transfer/i, (res.maxAmount - res.amount) }.Min(); //calc the max to be transfered into this tank
+                        //either as amount remaining to transfer divided by number of tanks remaining to transfer into OR free space in tank, whichever is smaller
+                        res.amount += max_t;            //add the amount to the tank
+                        to_transfer -= max_t;           //and deduct it from remaining amount to transfer
+                        resources_transfered += max_t;  //add amount added to overall track of transfered resources
                         i -= 1;                         //reduce count of remaining tanks to transfer to
+
+                        //extract the amount added to tank from source tanks.
+                        int j = tanks["available"].Count;
+                        foreach (PartResource s_res in tanks["available"] ) {
+                            double max_e = new double[]{ max_t/j, s_res.amount }.Min(); //calc the max to extract as either the total amount added 
+                            //(max_t) over number of source tanks OR take the available anount in the tank, which ever is smaller
+                            s_res.amount -= max_e;  //deduct amonut from tank
+                            max_t -= max_e;         //and deduct it from the amount remaining to extract
+                            j -= 1;                 //reduce the count of remaining tanks to extract from
+                        }
+                        //handle rounding errors - res.amount is a double, so division of doubles can result in rounding errors.  The descrepancy is 
+                        //the amount remaining on max_t, so the descrepency is deducted from the sink tank (and from the total overall transfer).
+                        res.amount -= max_t;
+                        resources_transfered -= max_t;
                     }
                 }
 
