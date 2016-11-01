@@ -94,8 +94,8 @@ namespace DockingFuelPump
             };
             GameEvents.onPartUndock.Add((part) => {
                 DockingFuelPump module = part.FindModuleImplementing<DockingFuelPump>();
-                if(module){
-                    log("undocking...pump stop");
+                if(module && module.pump_running){
+                    log("undocking...stopping fuel pump");
                     module.stop_fuel_pump();
                 }
             });
