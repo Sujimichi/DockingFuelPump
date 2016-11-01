@@ -50,7 +50,7 @@ namespace DockingFuelPump
     {
 
         internal static double flow_rate = 1.0;
-        internal static double power_drain = 0.3;
+        internal static double power_drain = 0.05;
         internal static bool part_highlighting = false;
         internal static bool transfer_heating = true;
 
@@ -65,6 +65,8 @@ namespace DockingFuelPump
         internal Part docked_to;
         internal DockingFuelPump opposite_pump;
         internal bool reverse_pump = false;
+        internal double pump_size;
+        internal double current_flow_rate = flow_rate;
 
         public bool pump_running = false;
         public bool warning_displayed = false;
@@ -106,6 +108,7 @@ namespace DockingFuelPump
             is_docked = false;
             warning_displayed = false;
 
+            pump_size = this.part.aerodynamicArea;
             get_docked_info();
             if(is_docked){
                 log("Starting Fuel Pump");
@@ -115,6 +118,7 @@ namespace DockingFuelPump
                 source_resources = identify_resources_in_parts(south_parts);
                 sink_resources   = identify_resources_in_parts(north_parts);
                 highlight_parts();
+                current_flow_rate = flow_rate;
                 pump_running = true;
             }
         }
@@ -134,6 +138,9 @@ namespace DockingFuelPump
             if(module.otherNode){
                 docked_to = module.otherNode.part;
                 opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
+                if(docked_to.aerodynamicArea < pump_size){
+                    pump_size = docked_to.aerodynamicArea;
+                }
                 is_docked = true;
             }
         }
@@ -284,9 +291,10 @@ namespace DockingFuelPump
                     }    
 
                     //calculate the rate at which to transfer this resouce from each tank, based on how many tanks are active in transfer, size of docking port and time warp
-                    volumes["rate"] = (flow_rate * 500) / new int[]{tanks["available"].Count, tanks["required"].Count}.Min();//rate is set as the flow_rate divided by the smallest number of active tanks.
-                    volumes["rate"] = volumes["rate"] * this.part.aerodynamicArea;  //factor size of docking port in rate of flow (larger docking ports have high flow rate).
-                    volumes["rate"] = volumes["rate"] * TimeWarp.deltaTime;         //factor in physics warp
+                    //rate is set as the flow_rate divided by the smallest number of active tanks.
+                    volumes["rate"] = (current_flow_rate * 200) / new int[]{tanks["available"].Count, tanks["required"].Count}.Min();
+                    volumes["rate"] = volumes["rate"] * pump_size;           //factor in size of docking port in rate of flow (larger docking ports have high flow rate).
+                    volumes["rate"] = volumes["rate"] * TimeWarp.deltaTime;  //factor in physics warp
 
                     double to_transfer = volumes.Values.Min();  //the amount to transfer is selected as the min of either the required or available 
                     //resources or the rate (which acts as a max flow value).
@@ -320,12 +328,9 @@ namespace DockingFuelPump
 
                 //Docking Port heating
                 if(transfer_heating){
-                    if(this.part.temperature < this.part.maxTemp * 0.7){
-                        this.part.temperature += 50;
-                    }
-                    if(docked_to.temperature < docked_to.maxTemp * 0.7){
-                        docked_to.temperature += 50;
-                    }
+//                    log("temp: " + Math.Round(this.part.temperature, 5) + " max: " + this.part.maxTemp + " flow rate: " + Math.Round(current_flow_rate, 5));
+                    this.part.temperature += resources_transfered * 0.9;
+                    current_flow_rate = (1 - (this.part.temperature / this.part.maxTemp)) * flow_rate;
                 }
 
                 //Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
@@ -339,7 +344,7 @@ namespace DockingFuelPump
                 }
 
                 //pump shutdown when dry.
-//                log("transfered: " + resources_transfered);
+                log("transfered: " + resources_transfered);
                 if(resources_transfered < 0.01){
                     stop_fuel_pump();
                 }
@@ -352,7 +357,6 @@ namespace DockingFuelPump
                 }
             }
         }
-
 
 
         //adds different highlight to south and north parts
