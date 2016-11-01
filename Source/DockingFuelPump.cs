@@ -344,7 +344,7 @@ namespace DockingFuelPump
                 }
 
                 //pump shutdown when dry.
-                log("transfered: " + resources_transfered);
+//                log("transfered: " + resources_transfered);
                 if(resources_transfered < 0.01){
                     stop_fuel_pump();
                 }
