@@ -234,10 +234,12 @@ namespace DockingFuelPump
             Dictionary<string, List<PartResource>> resources = new Dictionary<string, List<PartResource>>();
             foreach(Part part in parts){
                 foreach(PartResource res in part.Resources){
-                    if(!resources.ContainsKey(res.resourceName)){
-                        resources.Add(res.resourceName, new List<PartResource>());
+                    if (res.resourceName != "ElectricCharge" && !res.info.resourceFlowMode.Equals(ResourceFlowMode.NO_FLOW)) {
+                        if (!resources.ContainsKey(res.resourceName)) {
+                            resources.Add(res.resourceName, new List<PartResource>());
+                        }
+                        resources[res.resourceName].Add(res);
                     }
-                    resources[res.resourceName].Add(res);
                 }
             }
             return resources;
@@ -251,7 +253,7 @@ namespace DockingFuelPump
                 List<string> required_resource_types = new List<string>();
                 foreach (Part sink_part in north_parts) {
                     foreach (PartResource resource in sink_part.Resources) {
-                        if (resource.resourceName != "ElectricCharge" && resource.amount < resource.maxAmount && source_resources.Keys.Contains(resource.resourceName)) {
+                        if (resource.amount < resource.maxAmount && source_resources.Keys.Contains(resource.resourceName)) {
                             required_resource_types.AddUnique(resource.resourceName);
                         }
                     }
