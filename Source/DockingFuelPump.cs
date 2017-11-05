@@ -12,33 +12,41 @@ namespace DockingFuelPump
     [KSPAddon(KSPAddon.Startup.MainMenu, false)]
     public class DFPSettings : MonoBehaviour
     {
-        private void Awake(){
-            try{
-                
+        private void Awake()
+        {
+            try
+            {
                 string settings = System.IO.File.ReadAllText(Paths.joined(KSPUtil.ApplicationRootPath, "GameData", "DockingFuelPump", "dfp_settings.cfg"));
-                string[] lines = settings.Split(new string[] { Environment.NewLine }, StringSplitOptions.None);
+                string[] lines = settings.Split(new string[]{ Environment.NewLine }, StringSplitOptions.None);
                 Dictionary<string, string> opts = new Dictionary<string, string>();
-                foreach(string line in lines){
-                    if( !(line.StartsWith("{") || line.StartsWith("}") || line.StartsWith("//") || String.IsNullOrEmpty(line)) ){
+                foreach (string line in lines)
+                {
+                    if ( !(line.StartsWith("{") || line.StartsWith("}") || line.StartsWith("//") || String.IsNullOrEmpty(line)) )
+                    {
                         string[] l = line.Split('=');
                         l[1] = l[1].Split(new string[] {"//"}, StringSplitOptions.None)[0];
                         opts.Add(l[0].Trim(), l[1].Trim());
                     }
                 }
-                if(opts.ContainsKey("flow_rate")){
+                if (opts.ContainsKey("flow_rate"))
+                {
                     DockingFuelPump.flow_rate = double.Parse(opts["flow_rate"]);
                 }
-                if(opts.ContainsKey("power_drain")){
+                if (opts.ContainsKey("power_drain"))
+                {
                     DockingFuelPump.power_drain = double.Parse(opts["power_drain"]);
                 }
-                if(opts.ContainsKey("transfer_highlighting")){
+                if (opts.ContainsKey("transfer_highlighting"))
+                {
                     DockingFuelPump.part_highlighting = bool.Parse(opts["transfer_highlighting"]);
                 }
-                if(opts.ContainsKey("transfer_heating")){
+                if (opts.ContainsKey("transfer_heating"))
+                {
                     DockingFuelPump.transfer_heating = bool.Parse(opts["transfer_heating"]);
                 }
             }
-            catch{
+            catch
+            {
                 Debug.Log("[DFP] loading settings failed, using defaults");
             }
 
@@ -56,7 +64,7 @@ namespace DockingFuelPump
 
         //North and South Parts; parts divided in relationship to the docking port. Fuel will be pumped from the south to the north.
         internal List<Part> north_parts = new List<Part>(); //Parts "North" of the docking port are those which are connected via a docking join
-        internal List<Part> south_parts = new List<Part>();    //Parts "South" of the docking port are those which are connected via the attachment node on the docking port
+        internal List<Part> south_parts = new List<Part>(); //Parts "South" of the docking port are those which are connected via the attachment node on the docking port
         internal Dictionary<string, List<PartResource>> source_resources = new Dictionary<string, List<PartResource>>();
         internal Dictionary<string, List<PartResource>> sink_resources = new Dictionary<string, List<PartResource>>();
 
@@ -74,29 +82,35 @@ namespace DockingFuelPump
 
 
         [KSPEvent(guiActive = true, guiName = "Pump Fuel")]
-        public void pump_out(){
+        public void pump_out()
+        {
             reverse_pump = false;
             start_fuel_pump();
         }
 
         [KSPEvent(guiActive = true, guiName = "Stop Pump", active = false)]
-        public void stop_pump_out(){
+        public void stop_pump_out()
+        {
             stop_fuel_pump();
         }
 
         //setup events to stop the fuel pump when the port is undocked or it goes kaboomy
-        public override void OnStart(StartState state){
+        public override void OnStart(StartState state)
+        {
             this.part.OnJustAboutToBeDestroyed += () => {
-                if(pump_running){
+                if (pump_running)
+                {
                     stop_fuel_pump();
-                    if(opposite_pump){
+                    if (opposite_pump)
+                    {
                         opposite_pump.stop_fuel_pump();
                     }
                 }
             };
             GameEvents.onPartUndock.Add((part) => {
                 DockingFuelPump module = part.FindModuleImplementing<DockingFuelPump>();
-                if(module && module.pump_running){
+                if (module && module.pump_running)
+                {
                     log("undocking...stopping fuel pump");
                     module.stop_fuel_pump();
                 }
@@ -104,13 +118,15 @@ namespace DockingFuelPump
         }
 
 
-        public virtual void start_fuel_pump(){
+        public virtual void start_fuel_pump()
+        {
             is_docked = false;
             warning_displayed = false;
 
             pump_size = this.part.aerodynamicArea;
             get_docked_info();
-            if(is_docked){
+            if (is_docked)
+            {
                 log("Starting Fuel Pump");
                 Events["pump_out"].active = false;
                 Events["stop_pump_out"].active = true;
@@ -123,7 +139,8 @@ namespace DockingFuelPump
             }
         }
     
-        public virtual void stop_fuel_pump(){
+        public virtual void stop_fuel_pump()
+        {
             Events["pump_out"].active = true;
             Events["stop_pump_out"].active = false;
             pump_running = false;
@@ -133,12 +150,15 @@ namespace DockingFuelPump
 
 
         //set info about the docking.  if the part is docked this set's is_docked to true and sets docked_to to be the part it is docked with.
-        public virtual void get_docked_info(){
+        public virtual void get_docked_info()
+        {
             ModuleDockingNode module = this.part.FindModuleImplementing<ModuleDockingNode>();
-            if(module.otherNode){
+            if (module.otherNode)
+            {
                 docked_to = module.otherNode.part;
                 opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
-                if(docked_to.aerodynamicArea < pump_size){
+                if (docked_to.aerodynamicArea < pump_size)
+                {
                     pump_size = docked_to.aerodynamicArea;
                 }
                 is_docked = true;
@@ -147,21 +167,26 @@ namespace DockingFuelPump
 
         //get vessl parts (just those with resources) in two groups. Those on the opposite side of this.part to the part it is docked to (the south parts)
         //and those on (and connected to) the part this.part is docked to (the north parts). 
-        public virtual void get_part_groups(){
+        public virtual void get_part_groups()
+        {
             south_parts = get_descendant_parts(this.part);
             north_parts = get_descendant_parts(docked_to);
         }
 
         //Find the part(s) the focal_part (typically the docking port) is attached to (either by node or surface attach), 
         //but not the parts it is docked to.
-        public List<Part> get_connected_parts(Part focal_part){
+        public List<Part> get_connected_parts(Part focal_part)
+        {
             List<Part> connected_parts = new List<Part>(); 
-            foreach(AttachNode node in focal_part.attachNodes){
-                if(node.attachedPart){
+            foreach (AttachNode node in focal_part.attachNodes)
+            {
+                if (node.attachedPart)
+                {
                     connected_parts.Add(node.attachedPart);
                 }
             }
-            if(focal_part.srfAttachNode.attachedPart){
+            if (focal_part.srfAttachNode.attachedPart)
+            {
                 connected_parts.Add(focal_part.srfAttachNode.attachedPart);
             }
             connected_parts.Remove(docked_to);
@@ -170,7 +195,8 @@ namespace DockingFuelPump
 
         //Walk the tree structure of connected parts to recursively discover parts which are on the side of the given focal part opposite to the part it is docked to.
         //Walking the tree is blocked by parts which do not have cross feed enabled.
-        public List<Part> get_descendant_parts(Part focal_part){
+        public List<Part> get_descendant_parts(Part focal_part)
+        {
             List<Part> descendant_parts = new List<Part>();
             List<Part> next_parts = new List<Part>();
             List<Part> connected_parts = get_connected_parts(focal_part);
@@ -178,15 +204,19 @@ namespace DockingFuelPump
             descendant_parts.Add(focal_part);    
             
             bool itterate = true;
-            while(itterate){
+            while (itterate)
+            {
                 next_parts.Clear();
 
                 //select parents and children of parts in connected_parts and add them to next_parts.
-                foreach(Part part in connected_parts){
-                    if (part.parent) {
+                foreach (Part part in connected_parts)
+                {
+                    if (part.parent)
+                    {
                         next_parts.Add(part.parent);
                     }
-                    foreach (Part p in part.children) {
+                    foreach (Part p in part.children)
+                    {
                         next_parts.Add(p);
                     }
                 }
@@ -195,11 +225,14 @@ namespace DockingFuelPump
                 //if next_parts is empty then exit the loop.
                 connected_parts.Clear();
                 itterate = false;
-                if (next_parts.Count > 0) {
+                if (next_parts.Count > 0)
+                {
                     itterate = true;
-                    foreach (Part part in next_parts) {
+                    foreach (Part part in next_parts)
+                    {
                         bool allow_flow = part.fuelCrossFeed || part.FindModuleImplementing<ModuleGrappleNode>();
-                        if(!part_ids_for(descendant_parts).Contains(part.GetInstanceID()) && allow_flow){
+                        if (!part_ids_for(descendant_parts).Contains(part.GetInstanceID()) && allow_flow)
+                        {
                             connected_parts.Add(part);
                             descendant_parts.Add(part);
                         }
@@ -207,7 +240,8 @@ namespace DockingFuelPump
                 }
 
                 //ensure the loop will end if the above check fails.
-                if(descendant_parts.Count > FlightGlobals.ActiveVessel.parts.Count){ 
+                if (descendant_parts.Count > FlightGlobals.ActiveVessel.parts.Count)
+                { 
                     itterate = false;
                 }
             }
@@ -215,9 +249,12 @@ namespace DockingFuelPump
             //filter descendant_parts to be just those which have resources.
             List<int> part_ids = part_ids_for(descendant_parts);
             descendant_parts.Clear();
-            foreach(Part part in FlightGlobals.ActiveVessel.parts){
-                if (part.Resources.Count > 0) {
-                    if (part_ids.Contains(part.GetInstanceID())) {
+            foreach (Part part in FlightGlobals.ActiveVessel.parts)
+            {
+                if (part.Resources.Count > 0)
+                {
+                    if (part_ids.Contains(part.GetInstanceID()))
+                    {
                         descendant_parts.Add(part);
                     }
                 }
@@ -227,9 +264,11 @@ namespace DockingFuelPump
 
 
         //Get array of IDs for all parts in a list of parts
-        public List<int> part_ids_for(List<Part> parts){
+        public List<int> part_ids_for(List<Part> parts)
+        {
             List<int> part_ids = new List<int>();
-            foreach(Part part in parts){
+            foreach (Part part in parts)
+            {
                 part_ids.Add(part.GetInstanceID());
             }
             return part_ids;
@@ -237,12 +276,17 @@ namespace DockingFuelPump
 
 
         //setup dictionary of resource name to list of available PartResource(s) in the given list of parts
-        internal Dictionary<string, List<PartResource>> identify_resources_in_parts(List<Part> parts){
+        internal Dictionary<string, List<PartResource>> identify_resources_in_parts(List<Part> parts)
+        {
             Dictionary<string, List<PartResource>> resources = new Dictionary<string, List<PartResource>>();
-            foreach(Part part in parts){
-                foreach(PartResource res in part.Resources){
-                    if (res.resourceName != "ElectricCharge" && !res.info.resourceFlowMode.Equals(ResourceFlowMode.NO_FLOW)) {
-                        if (!resources.ContainsKey(res.resourceName)) {
+            foreach (Part part in parts)
+            {
+                foreach (PartResource res in part.Resources)
+                {
+                    if ((res.resourceName != "ElectricCharge") && !res.info.resourceFlowMode.Equals(ResourceFlowMode.NO_FLOW))
+                    {
+                        if (!resources.ContainsKey(res.resourceName))
+                        {
                             resources.Add(res.resourceName, new List<PartResource>());
                         }
                         resources[res.resourceName].Add(res);
@@ -252,39 +296,53 @@ namespace DockingFuelPump
             return resources;
         }
 
-        public override void OnUpdate(){
-            if(pump_running){
+        public override void OnUpdate()
+        {
+            if (pump_running)
+            {
                 double resources_transfered = 0; //keep track of overall quantity of resources transfered across the docking port each cycle. used to auto stop the pump.
 
                 //find the types of resources which need to be transfered
                 List<string> required_resource_types = new List<string>();
-                foreach (Part sink_part in north_parts) {
-                    foreach (PartResource resource in sink_part.Resources) {
-                        if (resource.amount < resource.maxAmount && source_resources.Keys.Contains(resource.resourceName)) {
+                foreach (Part sink_part in north_parts)
+                {
+                    foreach (PartResource resource in sink_part.Resources)
+                    {
+                        if ((resource.amount < resource.maxAmount) && source_resources.Keys.Contains(resource.resourceName))
+                        {
                             required_resource_types.AddUnique(resource.resourceName);
                         }
                     }
                 }
 
-
-                foreach(string res_name in required_resource_types){
+                foreach (string res_name in required_resource_types)
+                {
                     //holds the total available vs total required amount of current resource.  Also holds the max rate value as the min of all 
                     //these values is used to define the amount to be transfered in this cycle.
-                    Dictionary<string, double> volumes = new Dictionary<string, double>(){ {"available", 0.0}, {"required", 0.0}, {"rate", 0.0} }; 
+                    Dictionary<string, double> volumes = new Dictionary<string, double>(){
+                        { "available", 0.0},
+                        { "required", 0.0},
+                        { "rate", 0.0}
+                    }; 
                     //holds the resource tanks which have resouces to transfer and those which require resources
                     Dictionary<string, List<PartResource>> tanks = new Dictionary<string, List<PartResource>>(){ 
-                        {"available", new List<PartResource>()}, {"required", new List<PartResource>()} 
+                        {"available", new List<PartResource>()},
+                        { "required", new List<PartResource>()} 
                     };
 
                     //collect the available/required tanks and resource totals.
-                    foreach(PartResource res in source_resources[res_name]){
-                        if(res.amount > 0 && res.flowState){
+                    foreach (PartResource res in source_resources[res_name])
+                    {
+                        if ((res.amount > 0) && res.flowState)
+                        {
                             tanks["available"].Add(res);
                             volumes["available"] += res.amount;
                         }
                     }    
-                    foreach(PartResource res in sink_resources[res_name]){
-                        if(res.maxAmount - res.amount > 0 && res.flowState){
+                    foreach (PartResource res in sink_resources[res_name])
+                    {
+                        if ((res.maxAmount - res.amount > 0) && res.flowState)
+                        {
                             tanks["required"].Add(res);
                             volumes["required"] += (res.maxAmount - res.amount);
                         }
@@ -292,7 +350,7 @@ namespace DockingFuelPump
 
                     //calculate the rate at which to transfer this resouce from each tank, based on how many tanks are active in transfer, size of docking port and time warp
                     //rate is set as the flow_rate divided by the smallest number of active tanks.
-                    volumes["rate"] = (current_flow_rate * 200) / new int[]{tanks["available"].Count, tanks["required"].Count}.Min();
+                    volumes["rate"] = (current_flow_rate * 200) / (double)(new int[]{ tanks["available"].Count, tanks["required"].Count }.Min());
                     volumes["rate"] = volumes["rate"] * pump_size;           //factor in size of docking port in rate of flow (larger docking ports have high flow rate).
                     volumes["rate"] = volumes["rate"] * TimeWarp.deltaTime;  //factor in physics warp
 
@@ -301,7 +359,8 @@ namespace DockingFuelPump
 
                     //transfer resources between source and sink tanks.
                     int i = tanks["required"].Count;
-                    foreach (PartResource res in tanks["required"] ) {
+                    foreach (PartResource res in tanks["required"])
+                    {
                         //calcualte how much to transfer into a tank
                         double max_t = new double[]{ to_transfer/i, (res.maxAmount - res.amount) }.Min(); //calc the max to be transfered into this tank
                         //either as amount remaining to transfer divided by number of tanks remaining to transfer into OR free space in tank, whichever is smaller
@@ -312,7 +371,8 @@ namespace DockingFuelPump
 
                         //extract the amount added to tank from source tanks.
                         int j = tanks["available"].Count;
-                        foreach (PartResource s_res in tanks["available"] ) {
+                        foreach (PartResource s_res in tanks["available"])
+                        {
                             double max_e = new double[]{ max_t/j, s_res.amount }.Min(); //calc the max to extract as either the total amount added 
                             //(max_t) over number of source tanks OR take the available anount in the tank, which ever is smaller
                             s_res.amount -= max_e;  //deduct amonut from tank
@@ -327,15 +387,18 @@ namespace DockingFuelPump
                 }
 
                 //Docking Port heating
-                if(transfer_heating){
+                if (transfer_heating)
+                {
 //                    log("temp: " + Math.Round(this.part.temperature, 5) + " max: " + this.part.maxTemp + " flow rate: " + Math.Round(current_flow_rate, 5));
                     this.part.temperature += resources_transfered * 0.9;
                     current_flow_rate = (1 - (this.part.temperature / this.part.maxTemp)) * flow_rate;
                 }
 
                 //Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
-                if(opposite_pump && opposite_pump.pump_running){
-                    if(!warning_displayed){
+                if (opposite_pump && opposite_pump.pump_running)
+                {
+                    if (!warning_displayed)
+                    {
                         log("opposite pump running - imminent KABOOM likely!");
                         warning_displayed = true;
                     }
@@ -345,13 +408,16 @@ namespace DockingFuelPump
 
                 //pump shutdown when dry.
 //                log("transfered: " + resources_transfered);
-                if(resources_transfered < 0.01){
+                if (resources_transfered < 0.01)
+                {
                     stop_fuel_pump();
                 }
 
                 //pump power draw and shutdown when out of power.
-                if(power_drain > 0 && resources_transfered > 0){
-                    if(this.part.RequestResource("ElectricCharge", power_drain * resources_transfered) <= 0){
+                if ((power_drain > 0) && (resources_transfered > 0))
+                {
+                    if (this.part.RequestResource("ElectricCharge", power_drain * resources_transfered) <= 0)
+                    {
                         stop_fuel_pump();
                     }
                 }
@@ -360,21 +426,28 @@ namespace DockingFuelPump
 
 
         //adds different highlight to south and north parts
-        public void highlight_parts(){
-            if (part_highlighting) {
-                foreach (Part part in north_parts) {
+        public void highlight_parts()
+        {
+            if (part_highlighting)
+            {
+                foreach (Part part in north_parts)
+                {
                     part.Highlight(Color.blue);
                 }
-                foreach (Part part in south_parts) {
+                foreach (Part part in south_parts)
+                {
                     part.Highlight(Color.green);
                 }            
             }
         }
 
         //remove highlighting from parts.
-        public void unhighlight_parts(){
-            if(part_highlighting){
-                foreach(Part part in FlightGlobals.ActiveVessel.parts){
+        public void unhighlight_parts()
+        {
+            if (part_highlighting)
+            {
+                foreach (Part part in FlightGlobals.ActiveVessel.parts)
+                {
                     part.Highlight(false);
                 }
             }
@@ -382,7 +455,8 @@ namespace DockingFuelPump
         }
 
         //debug log shorthand
-        public void log(string msg){
+        public void log(string msg)
+        {
             Debug.Log("[DFP] " + msg);
         }
 
@@ -394,46 +468,60 @@ namespace DockingFuelPump
     {
 
         [KSPEvent(guiActive = true, guiName = "Extract Fuel")]
-        public void pump_in(){
+        public void pump_in()
+        {
             reverse_pump = true;
             start_fuel_pump();
         }
 
-        public override void stop_fuel_pump(){
+        public override void stop_fuel_pump()
+        {
             Events["pump_in"].active = true;
             base.stop_fuel_pump();
         }
 
-        public override void start_fuel_pump(){
+        public override void start_fuel_pump()
+        {
             base.start_fuel_pump();
-            if (is_docked) {
+            if (is_docked)
+            {
                 Events["pump_in"].active = false;
             }
         }
 
-        public override void get_docked_info(){
+        public override void get_docked_info()
+        {
             docked_to = find_attached_part();
-            if(docked_to){
+            if (docked_to)
+            {
                 is_docked = true;
             }
         }
 
-        public override void get_part_groups(){
-            if (reverse_pump) {
+        public override void get_part_groups()
+        {
+            if (reverse_pump)
+            {
                 south_parts = get_descendant_parts(docked_to);
                 north_parts = get_descendant_parts(this.part);
-            } else {
+            }
+            else
+            {
                 south_parts = get_descendant_parts(this.part);
                 north_parts = get_descendant_parts(docked_to);
             }
         }
 
-        internal Part find_attached_part(){
+        internal Part find_attached_part()
+        {
             Part attached_part = null;
             ModuleGrappleNode module = this.part.FindModuleImplementing<ModuleGrappleNode>();
-            if(module.otherVesselInfo != null){
-                foreach(Part part in FlightGlobals.ActiveVessel.parts){
-                    if(part.flightID == module.dockedPartUId){
+            if (module.otherVesselInfo != null)
+            {
+                foreach (Part part in FlightGlobals.ActiveVessel.parts)
+                {
+                    if (part.flightID == module.dockedPartUId)
+                    {
                         attached_part = part;
                     }
                 }
@@ -462,7 +550,7 @@ namespace DockingFuelPump
 //
 ////            this.part.Highlight(Color.red);
 ////            this.part.parent.Highlight(Color.blue);
-////            foreach(Part part in this.part.children){
+////            foreach (Part part in this.part.children){
 ////                part.Highlight(Color.green);
 ////            }
 //
@@ -478,7 +566,7 @@ namespace DockingFuelPump
 //        public void clear_highlight(){
 //            Events["test_highligh"].active = true;
 //            Events["clear_highlight"].active = false;
-//            foreach(Part part in FlightGlobals.ActiveVessel.parts){
+//            foreach (Part part in FlightGlobals.ActiveVessel.parts){
 //                part.Highlight(false);
 //            }
 //        }
@@ -490,9 +578,11 @@ namespace DockingFuelPump
         //takes any number of strings and returns them joined together with OS specific path divider, ie:
         //Paths.joined("follow", "the", "yellow", "brick", "road") -> "follow/the/yellow/brick/road or follow\the\yellow\brick\road
         //actually, not true, now it just joins them with /, as it seems mono sorts out path dividers anyway and using \ just messes things up here. (I mean, what kinda os uses \ anyway, madness).
-        static public string joined(params string[] paths){
+        static public string joined(params string[] paths)
+        {
             string path = paths[0];
-            for(int i = 1; i < paths.Length; i++){
+            for (int i = 1; i < paths.Length; i++)
+            {
                 path = path + "/" + paths[i];
             }
             return path;
