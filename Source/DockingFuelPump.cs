@@ -56,7 +56,7 @@ namespace DockingFuelPump
 
         //North and South Parts; parts divided in relationship to the docking port. Fuel will be pumped from the south to the north.
         internal List<Part> north_parts = new List<Part>(); //Parts "North" of the docking port are those which are connected via a docking join
-        internal List<Part> south_parts = new List<Part>();    //Parts "South" of the docking port are those which are connected via the attachment node on the docking port
+        internal List<Part> south_parts = new List<Part>(); //Parts "South" of the docking port are those which are connected via the attachment node on the docking port
         internal Dictionary<string, List<PartResource>> source_resources = new Dictionary<string, List<PartResource>>();
         internal Dictionary<string, List<PartResource>> sink_resources = new Dictionary<string, List<PartResource>>();
 
@@ -241,7 +241,7 @@ namespace DockingFuelPump
             Dictionary<string, List<PartResource>> resources = new Dictionary<string, List<PartResource>>();
             foreach(Part part in parts){
                 foreach(PartResource res in part.Resources){
-                    if (res.resourceName != "ElectricCharge" && !res.info.resourceFlowMode.Equals(ResourceFlowMode.NO_FLOW)) {
+                    if ((res.resourceName != "ElectricCharge") && !res.info.resourceFlowMode.Equals(ResourceFlowMode.NO_FLOW)) {
                         if (!resources.ContainsKey(res.resourceName)) {
                             resources.Add(res.resourceName, new List<PartResource>());
                         }
@@ -260,7 +260,7 @@ namespace DockingFuelPump
                 List<string> required_resource_types = new List<string>();
                 foreach (Part sink_part in north_parts) {
                     foreach (PartResource resource in sink_part.Resources) {
-                        if (resource.amount < resource.maxAmount && source_resources.Keys.Contains(resource.resourceName)) {
+                        if ((resource.amount < resource.maxAmount) && source_resources.Keys.Contains(resource.resourceName)) {
                             required_resource_types.AddUnique(resource.resourceName);
                         }
                     }
@@ -284,7 +284,7 @@ namespace DockingFuelPump
                         }
                     }    
                     foreach(PartResource res in sink_resources[res_name]){
-                        if(res.maxAmount - res.amount > 0 && res.flowState){
+                        if((res.maxAmount - res.amount > 0) && res.flowState){
                             tanks["required"].Add(res);
                             volumes["required"] += (res.maxAmount - res.amount);
                         }
@@ -292,7 +292,7 @@ namespace DockingFuelPump
 
                     //calculate the rate at which to transfer this resouce from each tank, based on how many tanks are active in transfer, size of docking port and time warp
                     //rate is set as the flow_rate divided by the smallest number of active tanks.
-                    volumes["rate"] = (current_flow_rate * 200) / new int[]{tanks["available"].Count, tanks["required"].Count}.Min();
+                    volumes["rate"] = (current_flow_rate * 200) / (double)(new int[]{tanks["available"].Count, tanks["required"].Count}.Min());
                     volumes["rate"] = volumes["rate"] * pump_size;           //factor in size of docking port in rate of flow (larger docking ports have high flow rate).
                     volumes["rate"] = volumes["rate"] * TimeWarp.deltaTime;  //factor in physics warp
 
@@ -350,7 +350,7 @@ namespace DockingFuelPump
                 }
 
                 //pump power draw and shutdown when out of power.
-                if(power_drain > 0 && resources_transfered > 0){
+                if((power_drain > 0) && (resources_transfered > 0)){
                     if(this.part.RequestResource("ElectricCharge", power_drain * resources_transfered) <= 0){
                         stop_fuel_pump();
                     }
