@@ -21,5 +21,5 @@ cd bin/Release
 zip -r DockingFuelPump.zip DockingFuelPump/
 
 
-rm -rf /home/sujimichi/KSP/dev_KSP-1.2/GameData/DockingFuelPump/
-cp -R DockingFuelPump/ /home/sujimichi/KSP/dev_KSP-1.2/GameData/DockingFuelPump/
+rm -rf /home/sujimichi/KSP/dev_KSP-1.3.1/GameData/DockingFuelPump/
+cp -R DockingFuelPump/ /home/sujimichi/KSP/dev_KSP-1.3.1/GameData/DockingFuelPump/
