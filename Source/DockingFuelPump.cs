@@ -88,8 +88,8 @@ namespace DockingFuelPump
         [KSPField(isPersistant = true, guiActive = false, guiName = "Fuel Pump")]
         public string fuel_pump_data;
 
-//        [KSPField(isPersistant = true, guiActive = true, guiName = "Fuel Pump Info")]
-//        public string fuel_pump_info;
+        [KSPField(isPersistant = true, guiActive = true, guiName = "Fuel Pump Info")]
+        public string fuel_pump_info;
 
         //setup events to stop the fuel pump when the port is undocked or it goes kaboomy
         public override void OnStart(StartState state){
@@ -342,16 +342,22 @@ namespace DockingFuelPump
 //                    log("temp: " + Math.Round(this.part.temperature, 5) + " max: " + this.part.maxTemp + " flow rate: " + Math.Round(current_flow_rate, 5));
                     //this.part.temperature += resources_transfered * 0.9;
                     //this.part.temperature += resources_transfered / (pump_size*2);
-                    this.part.temperature += resources_transfered / (pump_size * 2.5);
+                    this.part.temperature += 0.1 + (resources_transfered / (pump_size * pump_size * 0.8));
 
                     //[part.temperature,300].max - 300; the bit the [].max ensures this comes out postive, the reason for subtracting 200 from part temp is to ignore the "cold" 
                     //temperature of the port, so a part at cold (which is ~200-300) will have almost 100% transfer rate.
-                    current_flow_rate = (1 - ((new double[]{this.part.temperature,300}.Max()-300) / this.part.maxTemp)) * flow_rate;
+                    double cold_temp = 300;
+                    if (this.part.temperature <= cold_temp) {
+                        current_flow_rate = flow_rate;
+                    }else{
+                        current_flow_rate = (1 - ((this.part.temperature - cold_temp) / (this.part.maxTemp - cold_temp))) * flow_rate;
+                    }
+                    //current_flow_rate = (1 - ((new double[]{this.part.temperature,300}.Max()-300) / this.part.maxTemp)) * flow_rate;
 
                 }
 
                 //fuel_pump_info = "size: " + Math.Round(pump_size,2) + " mass: " + this.part.mass;
-                //fuel_pump_info = "trans: " + resources_transfered;
+                fuel_pump_info = "trans: " + resources_transfered;
                 fuel_pump_data = "flow rate: " + Math.Round(current_flow_rate, 2) + " temp: " + Math.Round(this.part.temperature, 2);
 
                 //Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
