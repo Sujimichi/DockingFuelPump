@@ -25,6 +25,7 @@ namespace DockingFuelPump
                         opts.Add(l[0].Trim(), l[1].Trim());
                     }
                 }
+                Debug.Log(opts.Keys);
                 if(opts.ContainsKey("flow_rate")){
                     DockingFuelPump.flow_rate = double.Parse(opts["flow_rate"]);
                 }
@@ -37,6 +38,10 @@ namespace DockingFuelPump
                 if(opts.ContainsKey("transfer_heating")){
                     DockingFuelPump.transfer_heating = bool.Parse(opts["transfer_heating"]);
                 }
+                if(opts.ContainsKey("heating_factor")){
+                    DockingFuelPump.heating_factor = double.Parse(opts["heating_factor"]);
+                }
+
             }
             catch{
                 Debug.Log("[DFP] loading settings failed, using defaults");
@@ -53,6 +58,7 @@ namespace DockingFuelPump
         internal static double power_drain = 0.05;
         internal static bool part_highlighting = false;
         internal static bool transfer_heating = true;
+        internal static double heating_factor = 0.5;
 
         //North and South Parts; parts divided in relationship to the docking port. Fuel will be pumped from the south to the north.
         internal List<Part> north_parts = new List<Part>(); //Parts "North" of the docking port are those which are connected via a docking join
@@ -68,6 +74,7 @@ namespace DockingFuelPump
         internal double pump_size;
         internal double scale_factor = 20.0;
         internal double current_flow_rate = flow_rate;
+        internal double cold_temp = 400; //below this temperature no flow rate adjustment is made
 
         public bool pump_running = false;
         public bool warning_displayed = false;
@@ -88,8 +95,8 @@ namespace DockingFuelPump
         [KSPField(isPersistant = true, guiActive = false, guiName = "Fuel Pump")]
         public string fuel_pump_data;
 
-        [KSPField(isPersistant = true, guiActive = true, guiName = "Fuel Pump Info")]
-        public string fuel_pump_info;
+//        [KSPField(isPersistant = true, guiActive = true, guiName = "Fuel Pump Info")]
+//        public string fuel_pump_info;
 
         //setup events to stop the fuel pump when the port is undocked or it goes kaboomy
         public override void OnStart(StartState state){
@@ -302,8 +309,8 @@ namespace DockingFuelPump
 
                     //calculate the rate at which to transfer this resouce from each tank, based on how many tanks are active in transfer, size of docking port and time warp
                     //rate is set as the flow_rate divided by the smallest number of active tanks.
-                    volumes["rate"] = (current_flow_rate * 200) / (double)(new int[]{tanks["available"].Count, tanks["required"].Count}.Min());
-                    volumes["rate"] = volumes["rate"] * pump_size;           //factor in size of docking port in rate of flow (larger docking ports have high flow rate).
+                    volumes["rate"] = (current_flow_rate * 400) / (double)(new int[]{tanks["available"].Count, tanks["required"].Count}.Min());
+                    volumes["rate"] = volumes["rate"] * Math.Sqrt(pump_size);           //factor in size of docking port in rate of flow (larger docking ports have high flow rate).
                     volumes["rate"] = volumes["rate"] * TimeWarp.deltaTime;  //factor in physics warp
 
                     double to_transfer = volumes.Values.Min();  //the amount to transfer is selected as the min of either the required or available 
@@ -337,27 +344,19 @@ namespace DockingFuelPump
                 }
 
                 //Docking Port heating
-
                 if(transfer_heating){
-//                    log("temp: " + Math.Round(this.part.temperature, 5) + " max: " + this.part.maxTemp + " flow rate: " + Math.Round(current_flow_rate, 5));
-                    //this.part.temperature += resources_transfered * 0.9;
-                    //this.part.temperature += resources_transfered / (pump_size*2);
-                    this.part.temperature += 0.1 + (resources_transfered / (pump_size * pump_size * 0.8));
+                    this.part.temperature += (0.5 + (resources_transfered / (pump_size * pump_size))) * heating_factor;
+                    opposite_pump.part.temperature = this.part.temperature; //heat the other port to the same level
 
-                    //[part.temperature,300].max - 300; the bit the [].max ensures this comes out postive, the reason for subtracting 200 from part temp is to ignore the "cold" 
-                    //temperature of the port, so a part at cold (which is ~200-300) will have almost 100% transfer rate.
-                    double cold_temp = 300;
                     if (this.part.temperature <= cold_temp) {
                         current_flow_rate = flow_rate;
                     }else{
                         current_flow_rate = (1 - ((this.part.temperature - cold_temp) / (this.part.maxTemp - cold_temp))) * flow_rate;
                     }
-                    //current_flow_rate = (1 - ((new double[]{this.part.temperature,300}.Max()-300) / this.part.maxTemp)) * flow_rate;
-
                 }
 
                 //fuel_pump_info = "size: " + Math.Round(pump_size,2) + " mass: " + this.part.mass;
-                fuel_pump_info = "trans: " + resources_transfered;
+//                fuel_pump_info = "trans: " + resources_transfered;
                 fuel_pump_data = "flow rate: " + Math.Round(current_flow_rate, 2) + " temp: " + Math.Round(this.part.temperature, 2);
 
                 //Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
