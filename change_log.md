@@ -1,5 +1,13 @@
 ## Change Log
 
+0.0.3
+- updated to KSP 1.3.1
+- bug fixes
+- tweaks to rate of transfer and heating
+- added setting to control heating rate
+- added setting to control which resources are ignored
+- added setting to enable certain resources to be transfered in the opposite direction
+
 0.0.2
 - prevent transfer of non-transferable resources ie solid rocket fuel.
 - prevent transferring fuel from tanks which have been locked.
