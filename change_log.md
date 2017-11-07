@@ -1,4 +1,4 @@
-###Change Log
+## Change Log
 
 0.0.2
 - prevent transfer of non-transferable resources ie solid rocket fuel.
