@@ -66,6 +66,7 @@ namespace DockingFuelPump
         internal DockingFuelPump opposite_pump;
         internal bool reverse_pump = false;
         internal double pump_size;
+        internal double scale_factor = 20.0;
         internal double current_flow_rate = flow_rate;
 
         public bool pump_running = false;
@@ -83,6 +84,12 @@ namespace DockingFuelPump
         public void stop_pump_out(){
             stop_fuel_pump();
         }
+
+        [KSPField(isPersistant = true, guiActive = false, guiName = "Fuel Pump")]
+        public string fuel_pump_data;
+
+//        [KSPField(isPersistant = true, guiActive = true, guiName = "Fuel Pump Info")]
+//        public string fuel_pump_info;
 
         //setup events to stop the fuel pump when the port is undocked or it goes kaboomy
         public override void OnStart(StartState state){
@@ -108,12 +115,14 @@ namespace DockingFuelPump
             is_docked = false;
             warning_displayed = false;
 
-            pump_size = this.part.aerodynamicArea;
+            pump_size = this.part.mass * scale_factor;
             get_docked_info();
             if(is_docked){
                 log("Starting Fuel Pump");
-                Events["pump_out"].active = false;
+                Events["pump_out"].active = false;               
                 Events["stop_pump_out"].active = true;
+                Fields["fuel_pump_data"].guiActive = true;
+
                 get_part_groups();
                 source_resources = identify_resources_in_parts(south_parts);
                 sink_resources   = identify_resources_in_parts(north_parts);
@@ -126,6 +135,7 @@ namespace DockingFuelPump
         public virtual void stop_fuel_pump(){
             Events["pump_out"].active = true;
             Events["stop_pump_out"].active = false;
+            Fields["fuel_pump_data"].guiActive = false;
             pump_running = false;
             log("Pump stopped");
             unhighlight_parts();
@@ -138,8 +148,8 @@ namespace DockingFuelPump
             if(module.otherNode){
                 docked_to = module.otherNode.part;
                 opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
-                if(docked_to.aerodynamicArea < pump_size){
-                    pump_size = docked_to.aerodynamicArea;
+                if(docked_to.mass*scale_factor < pump_size){
+                    pump_size = docked_to.mass*scale_factor;
                 }
                 is_docked = true;
             }
@@ -327,11 +337,22 @@ namespace DockingFuelPump
                 }
 
                 //Docking Port heating
+
                 if(transfer_heating){
 //                    log("temp: " + Math.Round(this.part.temperature, 5) + " max: " + this.part.maxTemp + " flow rate: " + Math.Round(current_flow_rate, 5));
-                    this.part.temperature += resources_transfered * 0.9;
-                    current_flow_rate = (1 - (this.part.temperature / this.part.maxTemp)) * flow_rate;
+                    //this.part.temperature += resources_transfered * 0.9;
+                    //this.part.temperature += resources_transfered / (pump_size*2);
+                    this.part.temperature += resources_transfered / (pump_size * 2.5);
+
+                    //[part.temperature,300].max - 300; the bit the [].max ensures this comes out postive, the reason for subtracting 200 from part temp is to ignore the "cold" 
+                    //temperature of the port, so a part at cold (which is ~200-300) will have almost 100% transfer rate.
+                    current_flow_rate = (1 - ((new double[]{this.part.temperature,300}.Max()-300) / this.part.maxTemp)) * flow_rate;
+
                 }
+
+                //fuel_pump_info = "size: " + Math.Round(pump_size,2) + " mass: " + this.part.mass;
+                //fuel_pump_info = "trans: " + resources_transfered;
+                fuel_pump_data = "flow rate: " + Math.Round(current_flow_rate, 2) + " temp: " + Math.Round(this.part.temperature, 2);
 
                 //Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
                 if(opposite_pump && opposite_pump.pump_running){
