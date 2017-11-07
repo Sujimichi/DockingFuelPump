@@ -3,8 +3,9 @@ using System.IO;
 using System.Linq;
 using System.Globalization;
 using System.Collections.Generic;
-
 using UnityEngine;
+//using OpenNodeParser;
+
 
 namespace DockingFuelPump
 {
@@ -13,40 +14,30 @@ namespace DockingFuelPump
     public class DFPSettings : MonoBehaviour
     {
         private void Awake(){
+            
+            //Attempt to load settings. IF reading settings fails default values will be used
             try{
-                
                 string settings = System.IO.File.ReadAllText(Paths.joined(KSPUtil.ApplicationRootPath, "GameData", "DockingFuelPump", "dfp_settings.cfg"));
-                string[] lines = settings.Split(new string[] { Environment.NewLine }, StringSplitOptions.None);
-                Dictionary<string, string> opts = new Dictionary<string, string>();
-                foreach(string line in lines){
-                    if( !(line.StartsWith("{") || line.StartsWith("}") || line.StartsWith("//") || String.IsNullOrEmpty(line)) ){
-                        string[] l = line.Split('=');
-                        l[1] = l[1].Split(new string[] {"//"}, StringSplitOptions.None)[0];
-                        opts.Add(l[0].Trim(), l[1].Trim());
+                ConfigNode nodes = ConfigNode.Parse(settings);
+                foreach (ConfigNode node in nodes.nodes) {
+                    if (node.HasValue("flow_rate"))             {DockingFuelPump.flow_rate         = double.Parse(node.GetValue("flow_rate"));}
+                    if (node.HasValue("power_drain"))           {DockingFuelPump.power_drain       = double.Parse(node.GetValue("power_drain"));}
+                    if (node.HasValue("transfer_highlighting")) {DockingFuelPump.part_highlighting =   bool.Parse(node.GetValue("transfer_highlighting"));}
+                    if (node.HasValue("transfer_heating"))      {DockingFuelPump.transfer_heating  =   bool.Parse(node.GetValue("transfer_heating"));}
+                    if (node.HasValue("heating_factor"))        {DockingFuelPump.heating_factor    = double.Parse(node.GetValue("heating_factor"));}
+                    foreach (ConfigNode sub_node in node.nodes) {
+                        if (sub_node.name == "RESOPTS") {
+                        DockingFuelPump.special_resources.Clear();
+                            foreach (ConfigNode.Value val in sub_node.values) {
+                                DockingFuelPump.special_resources.Add(val.name, val.value);
+                            }
+                        }
                     }
                 }
-                Debug.Log(opts.Keys);
-                if(opts.ContainsKey("flow_rate")){
-                    DockingFuelPump.flow_rate = double.Parse(opts["flow_rate"]);
-                }
-                if(opts.ContainsKey("power_drain")){
-                    DockingFuelPump.power_drain = double.Parse(opts["power_drain"]);
-                }
-                if(opts.ContainsKey("transfer_highlighting")){
-                    DockingFuelPump.part_highlighting = bool.Parse(opts["transfer_highlighting"]);
-                }
-                if(opts.ContainsKey("transfer_heating")){
-                    DockingFuelPump.transfer_heating = bool.Parse(opts["transfer_heating"]);
-                }
-                if(opts.ContainsKey("heating_factor")){
-                    DockingFuelPump.heating_factor = double.Parse(opts["heating_factor"]);
-                }
-
             }
             catch{
                 Debug.Log("[DFP] loading settings failed, using defaults");
             }
-
         }
     }
 
@@ -59,6 +50,10 @@ namespace DockingFuelPump
         internal static bool part_highlighting = false;
         internal static bool transfer_heating = true;
         internal static double heating_factor = 0.5;
+        internal static Dictionary<string, string> special_resources = new Dictionary<string, string>{
+            {"ElectricCharge", "ignore"}
+        };
+
 
         //North and South Parts; parts divided in relationship to the docking port. Fuel will be pumped from the south to the north.
         internal List<Part> north_parts = new List<Part>(); //Parts "North" of the docking port are those which are connected via a docking join
