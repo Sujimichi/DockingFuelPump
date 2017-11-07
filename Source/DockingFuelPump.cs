@@ -102,7 +102,7 @@ namespace DockingFuelPump
             stop_fuel_pump();
         }
 
-        [KSPField(isPersistant = true, guiActive = false, guiName = "Fuel Pump")]
+        [KSPField(isPersistant = true, guiActive = false, guiName = "Fuel Pump flow rate")]
         public string fuel_pump_data;
 
 //        [KSPField(isPersistant = true, guiActive = true, guiName = "Fuel Pump Info")]
@@ -371,7 +371,7 @@ namespace DockingFuelPump
 
                 //fuel_pump_info = "size: " + Math.Round(pump_size,2) + " mass: " + this.part.mass;
 //                fuel_pump_info = "trans: " + resources_transfered;
-                fuel_pump_data = "flow rate: " + Math.Round(current_flow_rate, 2) + " temp: " + Math.Round(this.part.temperature, 2);
+                fuel_pump_data = Math.Round(current_flow_rate, 2)*100 + "% temp: " + Math.Round(this.part.temperature, 2);
 
                 //Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
                 if(opposite_pump && opposite_pump.pump_running){
