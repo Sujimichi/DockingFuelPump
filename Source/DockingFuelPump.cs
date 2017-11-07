@@ -38,6 +38,17 @@ namespace DockingFuelPump
             catch{
                 Debug.Log("[DFP] loading settings failed, using defaults");
             }
+
+
+            //set info from special resources
+            foreach(KeyValuePair<string, string> res in DockingFuelPump.special_resources){
+                if (res.Value == "ignore") {
+                    DockingFuelPump.ignore_resources.Add(res.Key);
+                }
+                if (res.Value == "reverse") {
+                    DockingFuelPump.reverse_resources.Add(res.Key);
+                }
+            }
         }
     }
 
@@ -45,14 +56,18 @@ namespace DockingFuelPump
     public class DockingFuelPump : PartModule
     {
 
+        //Settings
         internal static double flow_rate = 1.0;
         internal static double power_drain = 0.05;
         internal static bool part_highlighting = false;
         internal static bool transfer_heating = true;
         internal static double heating_factor = 0.5;
-        internal static Dictionary<string, string> special_resources = new Dictionary<string, string>{
-            {"ElectricCharge", "ignore"}
-        };
+
+        //Special Resources
+        internal static Dictionary<string, string> special_resources = new Dictionary<string, string>();
+        internal static List<string> ignore_resources = new List<string>();
+        internal static List<string> reverse_resources = new List<string>();
+
 
 
         //North and South Parts; parts divided in relationship to the docking port. Fuel will be pumped from the south to the north.
@@ -253,7 +268,7 @@ namespace DockingFuelPump
             Dictionary<string, List<PartResource>> resources = new Dictionary<string, List<PartResource>>();
             foreach(Part part in parts){
                 foreach(PartResource res in part.Resources){
-                    if ((res.resourceName != "ElectricCharge") && !res.info.resourceFlowMode.Equals(ResourceFlowMode.NO_FLOW)) {
+                    if(!res.info.resourceFlowMode.Equals(ResourceFlowMode.NO_FLOW) && !ignore_resources.Contains(res.resourceName) ){
                         if (!resources.ContainsKey(res.resourceName)) {
                             resources.Add(res.resourceName, new List<PartResource>());
                         }
@@ -288,14 +303,18 @@ namespace DockingFuelPump
                         {"available", new List<PartResource>()}, {"required", new List<PartResource>()} 
                     };
 
+
+                    bool reverse_flow = reverse_resources.Contains(res_name); //if true switches sink_resources with source_resources so this resources is transfered in the opposite direction
+                    //reversed resources defined in reverse_resources which is set from special resources from settings.
+
                     //collect the available/required tanks and resource totals.
-                    foreach(PartResource res in source_resources[res_name]){
+                    foreach(PartResource res in (reverse_flow ? sink_resources : source_resources)[res_name]){
                         if(res.amount > 0 && res.flowState){
                             tanks["available"].Add(res);
                             volumes["available"] += res.amount;
                         }
                     }    
-                    foreach(PartResource res in sink_resources[res_name]){
+                    foreach(PartResource res in (reverse_flow ? source_resources : sink_resources)[res_name]){
                         if((res.maxAmount - res.amount > 0) && res.flowState){
                             tanks["required"].Add(res);
                             volumes["required"] += (res.maxAmount - res.amount);
@@ -441,11 +460,11 @@ namespace DockingFuelPump
 
         public override void get_part_groups(){
             if (reverse_pump) {
-                south_parts = get_descendant_parts(docked_to);
                 north_parts = get_descendant_parts(this.part);
+                south_parts = get_descendant_parts(docked_to);
             } else {
-                south_parts = get_descendant_parts(this.part);
                 north_parts = get_descendant_parts(docked_to);
+                south_parts = get_descendant_parts(this.part);
             }
         }
 
