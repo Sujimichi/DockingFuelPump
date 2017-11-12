@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Globalization;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 //using OpenNodeParser;
 
@@ -89,9 +90,10 @@ namespace DockingFuelPump
         public bool pump_running = false;
         public bool warning_displayed = false;
 
+        internal ModuleDockingNode pm;
 
 
-        [KSPEvent(guiActive = true, guiName = "Pump Fuel")]
+        [KSPEvent(guiActive = true, guiName = "Pump Fuel", active = false)]
         public void pump_out(){
             reverse_pump = false;
             start_fuel_pump();
@@ -102,16 +104,57 @@ namespace DockingFuelPump
             stop_fuel_pump();
         }
 
+        [KSPEvent(guiActive = true, guiName = "pump_test", active = true)]
+        public void pump_test(){
+//            ModuleDockingNode m = this.part.FindModuleImplementing<ModuleDockingNode>();
+            log(pm.state);
+//            log(m.dockedPartUId.ToString());
+//            log(m.otherNode.ToString());
+//            log(m.otherNode.part.name);
+        }
 
         [KSPField(isPersistant = true, guiActive = false, guiName = "Fuel Pump flow rate")]
         public string fuel_pump_data;
 
-//        [KSPField(isPersistant = true, guiActive = true, guiName = "Fuel Pump Info")]
-//        public string fuel_pump_info;
+        [KSPField(isPersistant = true, guiActive = true, guiName = "Fuel Pump Info")]
+        public string fuel_pump_info;
+
+
+        // on startup save the docking node PartModule
+
+        public void DFPonVesselChange(Vessel vessel){
+            ModuleDockingNode dock = this.part.FindModuleImplementing<ModuleDockingNode>();
+            DockingFuelPump d_pump = dock.part.FindModuleImplementing<DockingFuelPump>();
+            if(dock.dockedPartUId != 0 || dock.state.ToLower().Equals("preattached")){
+                d_pump.fuel_pump_info = "Docked bitches";
+                Events["pump_out"].active = true;
+            }else{
+                d_pump.fuel_pump_info = "forever alone";
+                Events["pump_out"].active = false;
+            }
+            log("delayed_check ran: " + dock.state);
+            log(dock.dockedPartUId.ToString());
+            
+        }
 
         //setup events to stop the fuel pump when the port is undocked or it goes kaboomy
         public override void OnStart(StartState state){
+            base.OnStart(state);
+            Vessel currentVessel = this.vessel;
+            for (int i = currentVessel.Parts.Count - 1; i >= 0; --i)
+            {
+                for (int j = currentVessel.parts[i].Modules.Count - 1; j >= 0; --j)
+                {
+                    if (currentVessel.parts[i].Modules[j].moduleName == "ModuleDockingNode")
+                    {
+                        pm = (ModuleDockingNode)currentVessel.parts[i].Modules[j];
+                    }
+                }   
+            }
+            
+
             this.part.OnJustAboutToBeDestroyed += () => {
+                log("just about to be destroyed called");
                 if(pump_running){
                     stop_fuel_pump();
                     if(opposite_pump){
@@ -119,15 +162,23 @@ namespace DockingFuelPump
                     }
                 }
             };
-            GameEvents.onPartUndock.Add((part) => {
-                DockingFuelPump module = part.FindModuleImplementing<DockingFuelPump>();
-                if(module && module.pump_running){
-                    log("undocking...stopping fuel pump");
-                    module.stop_fuel_pump();
-                }
-            });
+
+//            DFPonVesselChange(this.vessel);
+//            GameEvents.onVesselPartCountChanged.Add(DFPonVesselChange);
+            onVesselModify();
+            GameEvents.onVesselStandardModification.Add(onVesselModify);
         }
 
+        public void onVesselModify(Vessel gameEventVessel = null){
+            Events["pump_out"].active = (pm.state.StartsWith("Docked") || pm.state.StartsWith("PreAttached"));
+            fuel_pump_info = pm.state;
+            log(pm.state);
+        }
+
+        public void onDestroy(){
+//            GameEvents.onVesselPartCountChanged.Remove(DFPonVesselChange);
+            GameEvents.onVesselStandardModification.Remove(onVesselModify);
+        }
 
         public virtual void start_fuel_pump(){
             is_docked = false;
