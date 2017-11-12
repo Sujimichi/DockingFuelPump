@@ -102,6 +102,7 @@ namespace DockingFuelPump
             stop_fuel_pump();
         }
 
+
         [KSPField(isPersistant = true, guiActive = false, guiName = "Fuel Pump flow rate")]
         public string fuel_pump_data;
 
@@ -179,20 +180,14 @@ namespace DockingFuelPump
             north_parts = get_descendant_parts(docked_to);
         }
 
-        //Find the part(s) the focal_part (typically the docking port) is attached to (either by node or surface attach), 
-        //but not the parts it is docked to.
-        public List<Part> get_connected_parts(Part focal_part){
-            List<Part> connected_parts = new List<Part>(); 
-            foreach(AttachNode node in focal_part.attachNodes){
-                if(node.attachedPart){
-                    connected_parts.Add(node.attachedPart);
-                }
+        //add the parent and children of the given part to the given part list
+        public void add_relatives(Part part, List<Part> relatives){            
+            if (part.parent) {
+                relatives.Add(part.parent);
             }
-            if(focal_part.srfAttachNode.attachedPart){
-                connected_parts.Add(focal_part.srfAttachNode.attachedPart);
+            foreach(Part p in part.children){
+                relatives.Add(p);
             }
-            connected_parts.Remove(docked_to);
-            return connected_parts;
         }
 
         //Walk the tree structure of connected parts to recursively discover parts which are on the side of the given focal part opposite to the part it is docked to.
@@ -200,7 +195,10 @@ namespace DockingFuelPump
         public List<Part> get_descendant_parts(Part focal_part){
             List<Part> descendant_parts = new List<Part>();
             List<Part> next_parts = new List<Part>();
-            List<Part> connected_parts = get_connected_parts(focal_part);
+            List<Part> connected_parts = new List<Part>();
+
+            add_relatives(focal_part, connected_parts); //add the imediate parent/children of the focal part to connected_parts
+            connected_parts.Remove(docked_to);          //but exclude the part it is docked to.
 
             descendant_parts.Add(focal_part);    
             
@@ -208,14 +206,9 @@ namespace DockingFuelPump
             while(itterate){
                 next_parts.Clear();
 
-                //select parents and children of parts in connected_parts and add them to next_parts.
+                //select parents and children of parts in connected_parts and adds them to next_parts.
                 foreach(Part part in connected_parts){
-                    if (part.parent) {
-                        next_parts.Add(part.parent);
-                    }
-                    foreach (Part p in part.children) {
-                        next_parts.Add(p);
-                    }
+                    add_relatives(part, next_parts);
                 }
 
                 //add any parts in next_parts which are not already in descendant_parts to descendant_parts and new_parts
@@ -369,8 +362,6 @@ namespace DockingFuelPump
                     }
                 }
 
-                //fuel_pump_info = "size: " + Math.Round(pump_size,2) + " mass: " + this.part.mass;
-//                fuel_pump_info = "trans: " + resources_transfered;
                 fuel_pump_data = Math.Round(current_flow_rate, 2)*100 + "% temp: " + Math.Round(this.part.temperature, 2);
 
                 //Docking Port overheating when adjacent ports are both pumping (will quickly overheat and explode ports).
@@ -384,7 +375,6 @@ namespace DockingFuelPump
                 }
 
                 //pump shutdown when dry.
-//                log("transfered: " + resources_transfered);
                 if(resources_transfered < 0.01){
                     stop_fuel_pump();
                 }

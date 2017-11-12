@@ -1,4 +1,6 @@
 ## Change Log
+0.0.4
+  - better logic for selecting parts involved in transfer (solves some cases of pump not working on more complex craft).
 
 0.0.3
 - updated to KSP 1.3.1
