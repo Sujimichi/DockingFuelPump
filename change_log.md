@@ -6,6 +6,7 @@
 - updated to KSP 1.3.1
 - bug fixes
 - tweaks to rate of transfer and heating
+- added display of pump info (efficiency and temperature) to context menu
 - added setting to control heating rate
 - added setting to control which resources are ignored
 - added setting to enable certain resources to be transfered in the opposite direction
