@@ -224,102 +224,6 @@ namespace DockingFuelPump
 
 
 
-        //set info about the docking.  if the part is docked this set's is_docked to true and sets docked_to to be the part it is docked with.
-        public virtual void get_docked_info(){
-            ModuleDockingNode module = this.part.FindModuleImplementing<ModuleDockingNode>();
-            if(module.otherNode){
-                docked_to = module.otherNode.part;
-                opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
-                if(docked_to.mass*scale_factor < pump_size){
-                    pump_size = docked_to.mass*scale_factor;
-                }
-                is_docked = true;
-            }
-        }
-
-        //get vessl parts (just those with resources) in two groups. Those on the opposite side of this.part to the part it is docked to (the south parts)
-        //and those on (and connected to) the part this.part is docked to (the north parts). 
-        public virtual void get_part_groups(){
-            south_parts = get_descendant_parts(this.part);
-            north_parts = get_descendant_parts(docked_to);
-        }
-
-        //add the parent and children of the given part to the given part list
-        public void add_relatives(Part part, List<Part> relatives){            
-            if (part.parent) {
-                relatives.Add(part.parent);
-            }
-            foreach(Part p in part.children){
-                relatives.Add(p);
-            }
-        }
-
-        //Walk the tree structure of connected parts to recursively discover parts which are on the side of the given focal part opposite to the part it is docked to.
-        //Walking the tree is blocked by parts which do not have cross feed enabled.
-        public List<Part> get_descendant_parts(Part focal_part){
-            List<Part> descendant_parts = new List<Part>();
-            List<Part> next_parts = new List<Part>();
-            List<Part> connected_parts = new List<Part>();
-
-            descendant_parts.Add(focal_part); //add the focal part   
-            add_relatives(focal_part, connected_parts); //and add the imediate parent/children of the focal part to connected_parts
-            connected_parts.Remove(focal_part.FindModuleImplementing<ModuleDockingNode>().otherNode.part); //but exclude the part it is docked to.
-
-            
-            bool itterate = true;
-            while(itterate){
-                next_parts.Clear();
-
-                //select parents and children of parts in connected_parts and adds them to next_parts.
-                foreach(Part part in connected_parts){
-                    add_relatives(part, next_parts);
-                }
-
-                //add any parts in next_parts which are not already in descendant_parts to descendant_parts and new_parts
-                //if next_parts is empty then exit the loop.
-                connected_parts.Clear();
-                itterate = false;
-                if (next_parts.Count > 0) {
-                    itterate = true;
-                    foreach (Part part in next_parts) {
-                        bool allow_flow = part.fuelCrossFeed || part.FindModuleImplementing<ModuleGrappleNode>();
-                        if(!part_ids_for(descendant_parts).Contains(part.GetInstanceID()) && allow_flow){
-                            connected_parts.Add(part);
-                            descendant_parts.Add(part);
-                        }
-                    }
-                }
-
-                //ensure the loop will end if the above check fails.
-                if(descendant_parts.Count > FlightGlobals.ActiveVessel.parts.Count){ 
-                    itterate = false;
-                }
-            }
-
-            //filter descendant_parts to be just those which have resources.
-            List<int> part_ids = part_ids_for(descendant_parts);
-            descendant_parts.Clear();
-            foreach(Part part in FlightGlobals.ActiveVessel.parts){
-                if (part.Resources.Count > 0) {
-                    if (part_ids.Contains(part.GetInstanceID())) {
-                        descendant_parts.Add(part);
-                    }
-                }
-            }
-            return descendant_parts;
-        }
-
-
-        //Get array of IDs for all parts in a list of parts
-        public List<int> part_ids_for(List<Part> parts){
-            List<int> part_ids = new List<int>();
-            foreach(Part part in parts){
-                part_ids.Add(part.GetInstanceID());
-            }
-            return part_ids;
-        }
-
-
         //setup dictionary of resource name to list of available PartResource(s) in the given list of parts
         internal Dictionary<string, List<PartResource>> identify_resources_in_parts(List<Part> parts){
             Dictionary<string, List<PartResource>> resources = new Dictionary<string, List<PartResource>>();
@@ -335,6 +239,7 @@ namespace DockingFuelPump
             }
             return resources;
         }
+
 
         //This is the Main process. Called in onUpdate if pump_running is true and handles transfering resources between tanks.
         internal void transfer_resources(){
@@ -416,6 +321,7 @@ namespace DockingFuelPump
             }
 
             //Docking Port heating
+            transfer_heating = false;
             if(transfer_heating){
                 this.part.temperature += (0.5 + (resources_transfered / (pump_size * pump_size))) * heating_factor;
                 opposite_pump.part.temperature = this.part.temperature; //heat the other port to the same level
@@ -426,6 +332,7 @@ namespace DockingFuelPump
                     current_flow_rate = (1 - ((this.part.temperature - cold_temp) / (this.part.maxTemp - cold_temp))) * flow_rate;
                 }
             }
+            fuel_pump_info = "transfered: " + resources_transfered;
 
             fuel_pump_data = Math.Round(current_flow_rate, 2)*100 + "% temp: " + Math.Round(this.part.temperature, 2);
 
@@ -451,6 +358,104 @@ namespace DockingFuelPump
                 }
             }
         }
+
+
+
+        //set info about the docking.  if the part is docked this set's is_docked to true and sets docked_to to be the part it is docked with.
+        public virtual void get_docked_info(){
+            ModuleDockingNode module = this.part.FindModuleImplementing<ModuleDockingNode>();
+            if(module.otherNode){
+                docked_to = module.otherNode.part;
+                opposite_pump = docked_to.FindModuleImplementing<DockingFuelPump>();
+                if(docked_to.mass*scale_factor < pump_size){
+                    pump_size = docked_to.mass*scale_factor;
+                }
+                is_docked = true;
+            }
+        }
+
+        //get vessl parts (just those with resources) in two groups. Those on the opposite side of this.part to the part it is docked to (the south parts)
+        //and those on (and connected to) the part this.part is docked to (the north parts). 
+        public virtual void get_part_groups(){
+            south_parts = get_descendant_parts(this.part);
+            north_parts = get_descendant_parts(docked_to);
+        }
+
+        //Walk the tree structure of connected parts to recursively discover parts which are on the side of the given focal part opposite to the part it is docked to.
+        //Walking the tree is blocked by parts which do not have cross feed enabled.
+        public List<Part> get_descendant_parts(Part focal_part){
+            List<Part> descendant_parts = new List<Part>();
+            List<Part> next_parts = new List<Part>();
+            List<Part> connected_parts = new List<Part>();
+
+            descendant_parts.Add(focal_part); //add the focal part   
+            add_relatives(focal_part, connected_parts); //and add the imediate parent/children of the focal part to connected_parts
+            connected_parts.Remove(focal_part.FindModuleImplementing<ModuleDockingNode>().otherNode.part); //but exclude the part it is docked to.
+
+
+            bool itterate = true;
+            while(itterate){
+                next_parts.Clear();
+
+                //select parents and children of parts in connected_parts and adds them to next_parts.
+                foreach(Part part in connected_parts){
+                    add_relatives(part, next_parts);
+                }
+
+                //add any parts in next_parts which are not already in descendant_parts to descendant_parts and new_parts
+                //if next_parts is empty then exit the loop.
+                connected_parts.Clear();
+                itterate = false;
+                if (next_parts.Count > 0) {
+                    itterate = true;
+                    foreach (Part part in next_parts) {
+                        bool allow_flow = part.fuelCrossFeed || part.FindModuleImplementing<ModuleGrappleNode>();
+                        if(!part_ids_for(descendant_parts).Contains(part.GetInstanceID()) && allow_flow){
+                            connected_parts.Add(part);
+                            descendant_parts.Add(part);
+                        }
+                    }
+                }
+
+                //ensure the loop will end if the above check fails.
+                if(descendant_parts.Count > FlightGlobals.ActiveVessel.parts.Count){ 
+                    itterate = false;
+                }
+            }
+
+            //filter descendant_parts to be just those which have resources.
+            List<int> part_ids = part_ids_for(descendant_parts);
+            descendant_parts.Clear();
+            foreach(Part part in FlightGlobals.ActiveVessel.parts){
+                if (part.Resources.Count > 0) {
+                    if (part_ids.Contains(part.GetInstanceID())) {
+                        descendant_parts.Add(part);
+                    }
+                }
+            }
+            return descendant_parts;
+        }
+
+
+        //add the parent and children of the given part to the given part list
+        public void add_relatives(Part part, List<Part> relatives){            
+            if (part.parent) {
+                relatives.Add(part.parent);
+            }
+            foreach(Part p in part.children){
+                relatives.Add(p);
+            }
+        }
+
+        //Get array of IDs for all parts in a list of parts
+        public List<int> part_ids_for(List<Part> parts){
+            List<int> part_ids = new List<int>();
+            foreach(Part part in parts){
+                part_ids.Add(part.GetInstanceID());
+            }
+            return part_ids;
+        }
+
 
         //adds different highlight to south and north parts
         public void highlight_parts(){
