@@ -175,7 +175,7 @@ namespace DockingFuelPump
         //used in checking the state of ModuleDockingNode.  If the state of ModuleDockingNode has changed since it was last checked then this sets a delay
         //for a number of frames to wait before checking it again and will continue checking it until the state stops changing.  If the state hasn't changed
         //after n frames then it sets the active property of the pump_out button.
-        internal void check_state(bool force_check = false){
+        internal virtual void check_state(bool force_check = false){
             if (force_check) {
                 last_state = "";
             }
@@ -185,7 +185,7 @@ namespace DockingFuelPump
                 last_state = docking_module.state;
             } else {
                 state_changed = false;
-                Events["pump_out"].active = (docking_module.state.StartsWith("Docked") || docking_module.state.StartsWith("PreAttached") );
+                Events["pump_out"].active = (docking_module.state.StartsWith("Docked") || docking_module.state.StartsWith("PreAttached") || docking_module.state.StartsWith("Locked") );
                 fuel_pump_info = docking_module.state;
             }
         }
@@ -239,16 +239,16 @@ namespace DockingFuelPump
             return resources;
         }
 
-
+        //finds the resources in the sink and source parts and then determines which of those exist on both sides.
         internal void identify_resources(){
             source_resources = identify_resources_in_parts(south_parts);
             sink_resources   = identify_resources_in_parts(north_parts);
+            //find the types of resources which need to be transfered
             foreach (string resource_name in sink_resources.Keys) {
                 if(source_resources.Keys.Contains(resource_name)){
                     resources_to_transfer.AddUnique(resource_name);
                 }
             }
-
         }
 
 
@@ -256,10 +256,6 @@ namespace DockingFuelPump
         internal void transfer_resources(){
             
             double resources_transfered = 0; //keep track of overall quantity of resources transfered across the docking port each cycle. used to auto stop the pump.
-
-            //find the types of resources which need to be transfered
-//            List<string> resources_to_transfer = new List<string>();
-
 
             foreach(string res_name in resources_to_transfer){
                 //holds the total available vs total required amount of current resource.  Also holds the max rate value as the min of all 
@@ -325,10 +321,11 @@ namespace DockingFuelPump
             }
 
             //Docking Port heating
-            transfer_heating = false;
             if(transfer_heating){
                 this.part.temperature += (0.5 + (resources_transfered / (pump_size * pump_size))) * heating_factor;
-                opposite_pump.part.temperature = this.part.temperature; //heat the other port to the same level
+                if (opposite_pump) {
+                    opposite_pump.part.temperature = this.part.temperature; //heat the other port to the same level
+                }
 
                 if (this.part.temperature <= cold_temp) {
                     current_flow_rate = flow_rate;
@@ -394,8 +391,7 @@ namespace DockingFuelPump
 
             descendant_parts.Add(focal_part); //add the focal part   
             add_relatives(focal_part, connected_parts); //and add the imediate parent/children of the focal part to connected_parts
-            connected_parts.Remove(focal_part.FindModuleImplementing<ModuleDockingNode>().otherNode.part); //but exclude the part it is docked to.
-
+            remove_docked_part_from(connected_parts, focal_part);
 
             bool itterate = true;
             while(itterate){
@@ -451,6 +447,11 @@ namespace DockingFuelPump
             }
         }
 
+        //remove the part the focal part is docked to.  overridable method so when used on the claw it can be modified.
+        public virtual void remove_docked_part_from(List<Part> list, Part focal_part){
+            list.Remove(focal_part.FindModuleImplementing<ModuleDockingNode>().otherNode.part); //but exclude the part it is docked to.
+        }
+
         //Get array of IDs for all parts in a list of parts
         public List<int> part_ids_for(List<Part> parts){
             List<int> part_ids = new List<int>();
@@ -480,7 +481,6 @@ namespace DockingFuelPump
                     part.Highlight(false);
                 }
             }
-
         }
 
         //debug log shorthand
@@ -491,59 +491,7 @@ namespace DockingFuelPump
     }
 
 
-    //Alterations to base DockingFuelPump class to enable it to work with the Claw
-    public class ClawFuelPump : DockingFuelPump
-    {
-
-        [KSPEvent(guiActive = true, guiName = "Extract Fuel")]
-        public void pump_in(){
-            reverse_pump = true;
-            start_fuel_pump();
-        }
-
-        public override void stop_fuel_pump(){
-            Events["pump_in"].active = true;
-            base.stop_fuel_pump();
-        }
-
-        public override void start_fuel_pump(){
-            base.start_fuel_pump();
-            if (is_docked) {
-                Events["pump_in"].active = false;
-            }
-        }
-
-        public override void get_docked_info(){
-            docked_to = find_attached_part();
-            if(docked_to){
-                is_docked = true;
-            }
-        }
-
-        public override void get_part_groups(){
-            if (reverse_pump) {
-                north_parts = get_descendant_parts(this.part);
-                south_parts = get_descendant_parts(docked_to);
-            } else {
-                north_parts = get_descendant_parts(docked_to);
-                south_parts = get_descendant_parts(this.part);
-            }
-        }
-
-        internal Part find_attached_part(){
-            Part attached_part = null;
-            ModuleGrappleNode module = this.part.FindModuleImplementing<ModuleGrappleNode>();
-            if(module.otherVesselInfo != null){
-                foreach(Part part in FlightGlobals.ActiveVessel.parts){
-                    if(part.flightID == module.dockedPartUId){
-                        attached_part = part;
-                    }
-                }
-            }
-            return attached_part;
-        }
-
-    }
+ 
 
 
 //    public class TestHighlight : PartModule
