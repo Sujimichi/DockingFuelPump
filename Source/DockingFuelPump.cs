@@ -76,7 +76,7 @@ namespace DockingFuelPump
         internal List<Part> south_parts = new List<Part>(); //Parts "South" of the docking port are those which are connected via the attachment node on the docking port
         internal Dictionary<string, List<PartResource>> source_resources = new Dictionary<string, List<PartResource>>();
         internal Dictionary<string, List<PartResource>> sink_resources = new Dictionary<string, List<PartResource>>();
-
+        internal List<string> resources_to_transfer = new List<string>();
 
         internal bool is_docked = false;
         internal Part docked_to;
@@ -205,8 +205,7 @@ namespace DockingFuelPump
                 Fields["fuel_pump_data"].guiActive = true;
 
                 get_part_groups();
-                source_resources = identify_resources_in_parts(south_parts);
-                sink_resources   = identify_resources_in_parts(north_parts);
+                identify_resources();
                 highlight_parts();
                 current_flow_rate = flow_rate;
                 pump_running = true;
@@ -241,23 +240,28 @@ namespace DockingFuelPump
         }
 
 
+        internal void identify_resources(){
+            source_resources = identify_resources_in_parts(south_parts);
+            sink_resources   = identify_resources_in_parts(north_parts);
+            foreach (string resource_name in sink_resources.Keys) {
+                if(source_resources.Keys.Contains(resource_name)){
+                    resources_to_transfer.AddUnique(resource_name);
+                }
+            }
+
+        }
+
+
         //This is the Main process. Called in onUpdate if pump_running is true and handles transfering resources between tanks.
         internal void transfer_resources(){
             
             double resources_transfered = 0; //keep track of overall quantity of resources transfered across the docking port each cycle. used to auto stop the pump.
 
             //find the types of resources which need to be transfered
-            List<string> required_resource_types = new List<string>();
-            foreach (Part sink_part in north_parts) {
-                foreach (PartResource resource in sink_part.Resources) {
-                    if ((resource.amount < resource.maxAmount) && source_resources.Keys.Contains(resource.resourceName)) {
-                        required_resource_types.AddUnique(resource.resourceName);
-                    }
-                }
-            }
+//            List<string> resources_to_transfer = new List<string>();
 
 
-            foreach(string res_name in required_resource_types){
+            foreach(string res_name in resources_to_transfer){
                 //holds the total available vs total required amount of current resource.  Also holds the max rate value as the min of all 
                 //these values is used to define the amount to be transfered in this cycle.
                 Dictionary<string, double> volumes = new Dictionary<string, double>(){ {"available", 0.0}, {"required", 0.0}, {"rate", 0.0} }; 
@@ -287,7 +291,7 @@ namespace DockingFuelPump
                 //calculate the rate at which to transfer this resouce from each tank, based on how many tanks are active in transfer, size of docking port and time warp
                 //rate is set as the flow_rate divided by the smallest number of active tanks.
                 volumes["rate"] = (current_flow_rate * 400) / (double)(new int[]{tanks["available"].Count, tanks["required"].Count}.Min());
-                volumes["rate"] = volumes["rate"] * Math.Sqrt(pump_size);           //factor in size of docking port in rate of flow (larger docking ports have high flow rate).
+                volumes["rate"] = volumes["rate"] * Math.Sqrt(pump_size);//factor in size of docking port in rate of flow (larger docking ports have high flow rate).
                 volumes["rate"] = volumes["rate"] * TimeWarp.deltaTime;  //factor in physics warp
 
                 double to_transfer = volumes.Values.Min();  //the amount to transfer is selected as the min of either the required or available 
