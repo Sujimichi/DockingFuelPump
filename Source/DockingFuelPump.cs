@@ -122,6 +122,7 @@ namespace DockingFuelPump
 
 
 
+
         //setup events to show/hide the pump fuel buttong and to stop the fuel pump when the port is undocked or it goes kaboomy
         public override void OnStart(StartState state){
             base.OnStart(state);
@@ -167,7 +168,7 @@ namespace DockingFuelPump
 
         //Called by the onVesselStandardModification Event
         //sets a flag to check the state of the docking module after a few physics frames
-        public void onVesselModify(Vessel gameEventVessel = null){
+        public void onVesselModify(Vessel ves = null){
             check_state(true);
         }
 
@@ -260,10 +261,10 @@ namespace DockingFuelPump
             List<Part> next_parts = new List<Part>();
             List<Part> connected_parts = new List<Part>();
 
-            add_relatives(focal_part, connected_parts); //add the imediate parent/children of the focal part to connected_parts
-            connected_parts.Remove(docked_to);          //but exclude the part it is docked to.
+            descendant_parts.Add(focal_part); //add the focal part   
+            add_relatives(focal_part, connected_parts); //and add the imediate parent/children of the focal part to connected_parts
+            connected_parts.Remove(focal_part.FindModuleImplementing<ModuleDockingNode>().otherNode.part); //but exclude the part it is docked to.
 
-            descendant_parts.Add(focal_part);    
             
             bool itterate = true;
             while(itterate){
