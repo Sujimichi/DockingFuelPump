@@ -17,7 +17,7 @@ namespace DockingFuelPump
     public class JumpStart : MonoBehaviour
     {
         public bool autostart = true;
-        public string save_name = "default";
+        public string save_name = "dfp_dev";
 //        public string mode = "spacecenter";
 //        public string mode = "editor";
 		public string mode = "flight";
