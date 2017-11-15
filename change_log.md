@@ -2,6 +2,7 @@
 0.0.4
   - better logic for selecting parts involved in transfer (solves some cases of pump not working on more complex craft).
   - Pump Fuel button is only shown on context menu for docking ports which are docked.
+  - fixed fuel pump not working on claw
 
 0.0.3
 - updated to KSP 1.3.1

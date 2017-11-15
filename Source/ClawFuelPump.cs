@@ -6,15 +6,8 @@ namespace DockingFuelPump
     public class ClawFuelPump : DockingFuelPump
     {
 
-
-        [KSPEvent(guiActive = true, guiName = "Pump Fuel (claw)", active = true)]
-        public void claw_pump_out(){
-            reverse_pump = false;
-            start_fuel_pump();
-        }
-
         [KSPEvent(guiActive = true, guiName = "Extract Fuel", active = true)]
-        public void claw_pump_in(){
+        public void pump_in(){
             reverse_pump = true;
             start_fuel_pump();
         }
@@ -25,19 +18,20 @@ namespace DockingFuelPump
 
             if (is_docked) {
                 log("Starting Fuel Pump on Claw");
-                Events["claw_pump_out"].active = false;
-                Events["claw_pump_in"].active = false;
+                Events["pump_out"].active = false;
+                Events["pump_in"].active = false;
             }
         }
         
         public override void stop_fuel_pump(){
-            Events["claw_pump_out"].active = true;
-            Events["claw_pump_in"].active = true;
             base.stop_fuel_pump();
+            Events["pump_out"].active = true;
+            Events["pump_in"].active = true;
         }
 
         internal override void check_state(bool force_check = false){
-            Events["claw_pump_in"].active = true;
+            Events["pump_out"].active = true;
+            Events["pump_in"].active = true;
         }
 
         public override void get_docked_info(){
